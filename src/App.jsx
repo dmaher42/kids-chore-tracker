@@ -1,17 +1,37 @@
 import { useState, useEffect } from 'react';
-import { Users, Home, Settings, Plus, Trash2, DollarSign, Star, Award, ShoppingBag, Sparkles } from 'lucide-react';
+import { Users, Home, Settings, Plus, Trash2, DollarSign, Star, Award, ShoppingBag, Sparkles, Gamepad2, Zap, Trophy } from 'lucide-react';
 
 // Firebase imports
 import { db } from './firebase';
 import { collection, doc, setDoc, getDoc, updateDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
 
-// Pet options
+// Pet evolution stages (5 levels!)
 const PET_TYPES = {
-  dog: { emoji: '🐶', name: 'Dog', levels: ['🐶', '🐕', '🐕‍🦺'] },
-  cat: { emoji: '🐱', name: 'Cat', levels: ['🐱', '🐈', '🐈‍⬛'] },
-  bunny: { emoji: '🐰', name: 'Bunny', levels: ['🐰', '🐇', '🐇'] },
-  hamster: { emoji: '🐹', name: 'Hamster', levels: ['🐹', '🐹', '🐹'] },
-  dragon: { emoji: '🐲', name: 'Dragon', levels: ['🐲', '🐉', '🐉'] }
+  dog: { 
+    emoji: '🐶', 
+    name: 'Dog', 
+    levels: ['🥚', '🐕', '🐕', '🐕‍🦺', '🦮✨']
+  },
+  cat: { 
+    emoji: '🐱', 
+    name: 'Cat', 
+    levels: ['🥚', '🐱', '🐈', '🐈‍⬛', '😺✨']
+  },
+  bunny: { 
+    emoji: '🐰', 
+    name: 'Bunny', 
+    levels: ['🥚', '🐰', '🐇', '🐇', '🐇✨']
+  },
+  dragon: { 
+    emoji: '🐲', 
+    name: 'Dragon', 
+    levels: ['🥚', '🐲', '🐉', '🐉', '🐉✨🔥']
+  },
+  unicorn: { 
+    emoji: '🦄', 
+    name: 'Unicorn', 
+    levels: ['🥚', '🦄', '🦄', '🦄', '🦄✨🌈']
+  }
 };
 
 // Shop items
@@ -37,6 +57,8 @@ const SHOP_ITEMS = {
   ]
 };
 
+const LEVEL_NAMES = ['Egg', 'Baby', 'Teen', 'Adult', 'Legendary'];
+
 // Main App Component
 export default function ChoreTrackerApp() {
   const [isParent, setIsParent] = useState(false);
@@ -51,7 +73,6 @@ export default function ChoreTrackerApp() {
   const [petStates, setPetStates] = useState({});
   const [kidInventories, setKidInventories] = useState({});
   
-  // Initialize Firebase data
   useEffect(() => {
     const initializeData = async () => {
       try {
@@ -101,7 +122,6 @@ export default function ChoreTrackerApp() {
     initializeData();
   }, []);
   
-  // Listen to data changes
   useEffect(() => {
     const unsubscribe1 = onSnapshot(doc(db, 'app', 'kids'), (doc) => {
       if (doc.exists()) setKids(doc.data().data || []);
@@ -182,11 +202,23 @@ export default function ChoreTrackerApp() {
     await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
   };
   
-  const upgradePetLevel = async (kidId) => {
+  const addKidCoins = async (kidId, coinsToAdd) => {
     const updatedKids = kids.map(k => 
-      k.id === kidId ? { ...k, coins: Math.max(0, k.coins - 10), petLevel: Math.min(3, k.petLevel + 1) } : k
+      k.id === kidId ? { ...k, coins: k.coins + coinsToAdd } : k
     );
     await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
+  };
+  
+  const upgradePetLevel = async (kidId) => {
+    const kid = kids.find(k => k.id === kidId);
+    const upgradeCost = kid.petLevel * 10;
+    
+    if (kid.coins >= upgradeCost && kid.petLevel < 5) {
+      const updatedKids = kids.map(k => 
+        k.id === kidId ? { ...k, coins: Math.max(0, k.coins - upgradeCost), petLevel: k.petLevel + 1 } : k
+      );
+      await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
+    }
   };
   
   const changePetType = async (kidId, petType) => {
@@ -250,7 +282,8 @@ export default function ChoreTrackerApp() {
                 onClick={() => { setSelectedKid(kid.id); setCurrentView('kid'); }}
                 className="bg-white rounded-2xl p-6 shadow-lg hover:scale-105 transition-transform"
               >
-                <div className="text-6xl mb-4 text-center">{petType.levels[kid.petLevel - 1]}</div>
+                <div className="text-6xl mb-2 text-center">{petType.levels[kid.petLevel - 1]}</div>
+                <div className="text-sm text-gray-500 text-center mb-2">{LEVEL_NAMES[kid.petLevel - 1]} {petType.name}</div>
                 <h3 className="text-2xl font-bold text-center mb-2">{kid.name}</h3>
                 <div className="flex justify-center items-center gap-2 text-yellow-600">
                   <DollarSign size={20} />
@@ -308,6 +341,7 @@ export default function ChoreTrackerApp() {
   
   const KidScreen = () => {
     const [showShop, setShowShop] = useState(false);
+    const [showGames, setShowGames] = useState(false);
     const kid = kids.find(k => k.id === selectedKid);
     const completedChores = dailyProgress[selectedKid] || [];
     const allDone = completedChores.length === chores.length;
@@ -375,7 +409,7 @@ export default function ChoreTrackerApp() {
             )}
           </div>
           
-          {allDone && !showShop && (
+          {allDone && !showShop && !showGames && (
             <VirtualPetGame 
               kid={kid} 
               petState={petStates[selectedKid] || { food: 50, happy: 50 }}
@@ -385,6 +419,7 @@ export default function ChoreTrackerApp() {
               upgradePet={() => upgradePetLevel(selectedKid)}
               changePet={(type) => changePetType(selectedKid, type)}
               onOpenShop={() => setShowShop(true)}
+              onOpenGames={() => setShowGames(true)}
               equipItem={(itemId, category) => equipItem(selectedKid, itemId, category)}
             />
           )}
@@ -397,17 +432,26 @@ export default function ChoreTrackerApp() {
               onClose={() => setShowShop(false)}
             />
           )}
+          
+          {allDone && showGames && (
+            <MiniGames
+              kid={kid}
+              onEarnCoins={(amount) => addKidCoins(selectedKid, amount)}
+              onClose={() => setShowGames(false)}
+            />
+          )}
         </div>
       </div>
     );
   };
   
-  const VirtualPetGame = ({ kid, petState, inventory, updatePetState, updateCoins, upgradePet, changePet, onOpenShop, equipItem }) => {
+  const VirtualPetGame = ({ kid, petState, inventory, updatePetState, updateCoins, upgradePet, changePet, onOpenShop, onOpenGames, equipItem }) => {
     const [showPetSelector, setShowPetSelector] = useState(false);
     const petType = PET_TYPES[kid.petType] || PET_TYPES.dog;
     const equippedBg = inventory.backgrounds.length > 0 ? 
       SHOP_ITEMS.backgrounds.find(bg => bg.id === inventory.equipped.backgrounds) : null;
     const bgClass = equippedBg ? equippedBg.gradient : 'from-sky-200 to-green-200';
+    const upgradeCost = kid.petLevel * 10;
     
     const feedPet = () => {
       if (kid.coins >= 3) {
@@ -424,7 +468,7 @@ export default function ChoreTrackerApp() {
     };
     
     const handleUpgrade = () => {
-      if (kid.coins >= 10 && kid.petLevel < 3) {
+      if (kid.coins >= upgradeCost && kid.petLevel < 5) {
         upgradePet();
       }
     };
@@ -438,13 +482,22 @@ export default function ChoreTrackerApp() {
       <div className="bg-white rounded-2xl p-6 shadow-xl">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-2xl font-bold">🏠 Your Virtual Pet</h3>
-          <button
-            onClick={onOpenShop}
-            className="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 flex items-center gap-2"
-          >
-            <ShoppingBag size={20} />
-            Shop
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onOpenGames}
+              className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 flex items-center gap-2"
+            >
+              <Gamepad2 size={20} />
+              Games
+            </button>
+            <button
+              onClick={onOpenShop}
+              className="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 flex items-center gap-2"
+            >
+              <ShoppingBag size={20} />
+              Shop
+            </button>
+          </div>
         </div>
         
         <div className={`bg-gradient-to-b ${bgClass} rounded-xl p-6 mb-4 min-h-64 relative`}>
@@ -465,7 +518,8 @@ export default function ChoreTrackerApp() {
                 {equippedAccessory.emoji}
               </div>
             )}
-            <div className="text-xl font-bold">Level {kid.petLevel} {petType.name}</div>
+            <div className="text-xl font-bold">{LEVEL_NAMES[kid.petLevel - 1]} {petType.name}</div>
+            <div className="text-sm text-gray-600">Level {kid.petLevel}/5</div>
             <button
               onClick={() => setShowPetSelector(!showPetSelector)}
               className="text-sm text-blue-600 hover:underline"
@@ -532,11 +586,10 @@ export default function ChoreTrackerApp() {
           </button>
           <button
             onClick={handleUpgrade}
-            disabled={kid.coins < 10 || kid.petLevel >= 3}
+            disabled={kid.coins < upgradeCost || kid.petLevel >= 5}
             className="bg-purple-500 text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-purple-600 transition"
           >
-            ⭐ Upgrade<br/>
-            <span className="text-sm">(10 coins)</span>
+            {kid.petLevel === 5 ? '✨ MAX' : `⭐ Evolve (${upgradeCost})`}
           </button>
         </div>
         
@@ -566,15 +619,269 @@ export default function ChoreTrackerApp() {
     );
   };
   
+  const MiniGames = ({ kid, onEarnCoins, onClose }) => {
+    const [currentGame, setCurrentGame] = useState(null);
+    const [gameState, setGameState] = useState({});
+    
+    // Quick Click Game
+    const [clickCount, setClickCount] = useState(0);
+    const [clickTimeLeft, setClickTimeLeft] = useState(5);
+    const [clickGameActive, setClickGameActive] = useState(false);
+    
+    useEffect(() => {
+      if (clickGameActive && clickTimeLeft > 0) {
+        const timer = setTimeout(() => setClickTimeLeft(clickTimeLeft - 1), 1000);
+        return () => clearTimeout(timer);
+      } else if (clickGameActive && clickTimeLeft === 0) {
+        setClickGameActive(false);
+        const coinsEarned = Math.floor(clickCount / 2);
+        if (coinsEarned > 0) {
+          onEarnCoins(coinsEarned);
+          alert(`Great job! You earned ${coinsEarned} coins!`);
+        }
+      }
+    }, [clickTimeLeft, clickGameActive, clickCount]);
+    
+    const startClickGame = () => {
+      setClickCount(0);
+      setClickTimeLeft(5);
+      setClickGameActive(true);
+    };
+    
+    // Memory Game
+    const [memoryCards, setMemoryCards] = useState([]);
+    const [flippedCards, setFlippedCards] = useState([]);
+    const [matchedCards, setMatchedCards] = useState([]);
+    const [memoryMoves, setMemoryMoves] = useState(0);
+    
+    const startMemoryGame = () => {
+      const emojis = ['🍎', '🍌', '🍇', '🍓'];
+      const cards = [...emojis, ...emojis].sort(() => Math.random() - 0.5).map((emoji, i) => ({ id: i, emoji }));
+      setMemoryCards(cards);
+      setFlippedCards([]);
+      setMatchedCards([]);
+      setMemoryMoves(0);
+      setCurrentGame('memory');
+    };
+    
+    const flipCard = (id) => {
+      if (flippedCards.length === 2 || flippedCards.includes(id) || matchedCards.includes(id)) return;
+      
+      const newFlipped = [...flippedCards, id];
+      setFlippedCards(newFlipped);
+      
+      if (newFlipped.length === 2) {
+        setMemoryMoves(memoryMoves + 1);
+        const card1 = memoryCards.find(c => c.id === newFlipped[0]);
+        const card2 = memoryCards.find(c => c.id === newFlipped[1]);
+        
+        if (card1.emoji === card2.emoji) {
+          setMatchedCards([...matchedCards, ...newFlipped]);
+          setFlippedCards([]);
+          
+          if (matchedCards.length + 2 === memoryCards.length) {
+            const bonus = Math.max(5 - memoryMoves, 1);
+            onEarnCoins(bonus);
+            setTimeout(() => alert(`You won! Earned ${bonus} coins!`), 300);
+          }
+        } else {
+          setTimeout(() => setFlippedCards([]), 1000);
+        }
+      }
+    };
+    
+    // Coin Flip Game
+    const [coinFlipResult, setCoinFlipResult] = useState(null);
+    const [coinFlipBet, setCoinFlipBet] = useState(2);
+    
+    const playCoinFlip = (guess) => {
+      if (kid.coins < coinFlipBet) {
+        alert('Not enough coins!');
+        return;
+      }
+      
+      const result = Math.random() > 0.5 ? 'heads' : 'tails';
+      setCoinFlipResult(result);
+      
+      if (result === guess) {
+        onEarnCoins(coinFlipBet * 2);
+        setTimeout(() => alert(`You won! Earned ${coinFlipBet * 2} coins!`), 500);
+      } else {
+        onEarnCoins(-coinFlipBet);
+        setTimeout(() => alert(`You lost ${coinFlipBet} coins. Try again!`), 500);
+      }
+      
+      setTimeout(() => setCoinFlipResult(null), 2000);
+    };
+    
+    if (!currentGame) {
+      return (
+        <div className="bg-white rounded-2xl p-6 shadow-xl">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-2xl font-bold">🎮 Mini Games</h3>
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+              ← Back
+            </button>
+          </div>
+          
+          <div className="grid gap-4">
+            <button
+              onClick={() => { startClickGame(); setCurrentGame('click'); }}
+              className="bg-gradient-to-r from-red-400 to-orange-500 text-white p-6 rounded-xl hover:scale-105 transition"
+            >
+              <Zap size={40} className="mx-auto mb-2" />
+              <h4 className="text-xl font-bold">Quick Click</h4>
+              <p className="text-sm">Click fast for 5 seconds!</p>
+              <p className="text-xs mt-2">Earn: 1 coin per 2 clicks</p>
+            </button>
+            
+            <button
+              onClick={startMemoryGame}
+              className="bg-gradient-to-r from-blue-400 to-purple-500 text-white p-6 rounded-xl hover:scale-105 transition"
+            >
+              <span className="text-4xl">🧠</span>
+              <h4 className="text-xl font-bold">Memory Match</h4>
+              <p className="text-sm">Match the pairs!</p>
+              <p className="text-xs mt-2">Earn: Up to 5 coins</p>
+            </button>
+            
+            <button
+              onClick={() => setCurrentGame('coinflip')}
+              className="bg-gradient-to-r from-yellow-400 to-green-500 text-white p-6 rounded-xl hover:scale-105 transition"
+            >
+              <span className="text-4xl">🪙</span>
+              <h4 className="text-xl font-bold">Lucky Flip</h4>
+              <p className="text-sm">Guess heads or tails!</p>
+              <p className="text-xs mt-2">Risk coins to win double!</p>
+            </button>
+          </div>
+        </div>
+      );
+    }
+    
+    if (currentGame === 'click') {
+      return (
+        <div className="bg-white rounded-2xl p-6 shadow-xl">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-2xl font-bold">⚡ Quick Click</h3>
+            <button onClick={() => setCurrentGame(null)} className="text-gray-500">
+              ← Back
+            </button>
+          </div>
+          
+          <div className="text-center">
+            <div className="text-6xl font-bold text-blue-600 mb-4">{clickTimeLeft}s</div>
+            <div className="text-4xl font-bold text-green-600 mb-6">Clicks: {clickCount}</div>
+            
+            <button
+              onClick={() => clickGameActive && setClickCount(clickCount + 1)}
+              disabled={!clickGameActive}
+              className="w-full h-48 bg-gradient-to-r from-red-500 to-orange-500 text-white text-3xl font-bold rounded-xl hover:scale-105 transition disabled:opacity-50"
+            >
+              {clickGameActive ? 'CLICK ME!' : 'Start Game'}
+            </button>
+            
+            {!clickGameActive && clickTimeLeft === 5 && (
+              <button
+                onClick={startClickGame}
+                className="mt-4 w-full bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600"
+              >
+                Start Game
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    if (currentGame === 'memory') {
+      return (
+        <div className="bg-white rounded-2xl p-6 shadow-xl">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-2xl font-bold">🧠 Memory Match</h3>
+            <button onClick={() => setCurrentGame(null)} className="text-gray-500">
+              ← Back
+            </button>
+          </div>
+          
+          <div className="text-center mb-4">
+            <span className="text-lg font-bold">Moves: {memoryMoves}</span>
+          </div>
+          
+          <div className="grid grid-cols-4 gap-3">
+            {memoryCards.map(card => (
+              <button
+                key={card.id}
+                onClick={() => flipCard(card.id)}
+                className="aspect-square bg-gradient-to-br from-blue-400 to-purple-500 rounded-xl text-4xl flex items-center justify-center hover:scale-105 transition"
+              >
+                {flippedCards.includes(card.id) || matchedCards.includes(card.id) ? card.emoji : '?'}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    
+    if (currentGame === 'coinflip') {
+      return (
+        <div className="bg-white rounded-2xl p-6 shadow-xl">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-2xl font-bold">🪙 Lucky Flip</h3>
+            <button onClick={() => setCurrentGame(null)} className="text-gray-500">
+              ← Back
+            </button>
+          </div>
+          
+          <div className="text-center">
+            <div className="text-6xl mb-4">
+              {coinFlipResult === 'heads' ? '🙂' : coinFlipResult === 'tails' ? '🪙' : '🪙'}
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-bold mb-2">Bet Amount:</label>
+              <input
+                type="number"
+                min="1"
+                max={kid.coins}
+                value={coinFlipBet}
+                onChange={(e) => setCoinFlipBet(Number(e.target.value))}
+                className="w-32 p-2 border rounded-lg text-center"
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => playCoinFlip('heads')}
+                disabled={coinFlipResult !== null}
+                className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white py-6 rounded-xl hover:scale-105 transition disabled:opacity-50"
+              >
+                <div className="text-3xl mb-2">🙂</div>
+                <div className="font-bold">HEADS</div>
+              </button>
+              <button
+                onClick={() => playCoinFlip('tails')}
+                disabled={coinFlipResult !== null}
+                className="bg-gradient-to-r from-blue-400 to-purple-500 text-white py-6 rounded-xl hover:scale-105 transition disabled:opacity-50"
+              >
+                <div className="text-3xl mb-2">🪙</div>
+                <div className="font-bold">TAILS</div>
+              </button>
+            </div>
+            
+            <p className="text-sm text-gray-600 mt-4">Win: Double your bet! Lose: Lose your bet</p>
+          </div>
+        </div>
+      );
+    }
+  };
+  
   const PetShop = ({ kid, inventory, onBuy, onClose }) => {
     return (
       <div className="bg-white rounded-2xl p-6 shadow-xl">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-2xl font-bold">🛍️ Pet Shop</h3>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
             ← Back to Pet
           </button>
         </div>
@@ -737,18 +1044,23 @@ export default function ChoreTrackerApp() {
           </div>
           
           <div className="grid md:grid-cols-3 gap-4 mb-6">
-            {kids.map(kid => (
-              <div key={kid.id} className="bg-white rounded-xl p-4 shadow">
-                <h3 className="text-xl font-bold mb-2">{kid.name}</h3>
-                <div className="text-2xl text-yellow-600 font-bold mb-1">${kid.coins}</div>
-                <div className="text-sm text-gray-600">
-                  Completed: {(dailyProgress[kid.id] || []).length}/{chores.length}
+            {kids.map(kid => {
+              const petType = PET_TYPES[kid.petType] || PET_TYPES.dog;
+              return (
+                <div key={kid.id} className="bg-white rounded-xl p-4 shadow">
+                  <div className="text-4xl text-center mb-2">{petType.levels[kid.petLevel - 1]}</div>
+                  <h3 className="text-xl font-bold mb-2">{kid.name}</h3>
+                  <div className="text-sm text-gray-500 mb-1">{LEVEL_NAMES[kid.petLevel - 1]} {petType.name}</div>
+                  <div className="text-2xl text-yellow-600 font-bold mb-1">${kid.coins}</div>
+                  <div className="text-sm text-gray-600">
+                    Completed: {(dailyProgress[kid.id] || []).length}/{chores.length}
+                  </div>
+                  <div className="text-sm text-orange-500">
+                    {kid.streak} day streak 🔥
+                  </div>
                 </div>
-                <div className="text-sm text-orange-500">
-                  {kid.streak} day streak 🔥
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           
           <div className="bg-white rounded-xl p-6 shadow mb-6">
