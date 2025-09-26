@@ -230,20 +230,45 @@ export default function ChoreTrackerApp() {
   
   const buyItem = async (kidId, item, category) => {
     const kid = kids.find(k => k.id === kidId);
-    if (kid.coins >= item.price) {
-      const inventory = kidInventories[kidId] || { clothing: [], accessories: [], backgrounds: [], equipped: {} };
+    const inventory = kidInventories[kidId] || { clothing: [], accessories: [], backgrounds: [], equipped: {} };
+    
+    // Check if already owned
+    if (inventory[category] && inventory[category].includes(item.id)) {
+      alert('You already own this item!');
+      return;
+    }
+    
+    // Check if enough coins
+    if (kid.coins < item.price) {
+      alert(`Not enough coins! You need ${item.price} coins.`);
+      return;
+    }
+    
+    try {
+      // Update inventory
+      const newInventory = {
+        ...inventory,
+        [category]: [...(inventory[category] || []), item.id]
+      };
       
-      if (!inventory[category].includes(item.id)) {
-        const newInventory = {
-          ...inventory,
-          [category]: [...inventory[category], item.id]
-        };
-        
-        await updateDoc(doc(db, 'app', 'inventories'), {
-          data: { ...kidInventories, [kidId]: newInventory }
-        });
-        await updateKidCoins(kidId, item.price);
-      }
+      // Update coins
+      const updatedKids = kids.map(k => 
+        k.id === kidId ? { ...k, coins: k.coins - item.price } : k
+      );
+      
+      // Update both in Firebase
+      await updateDoc(doc(db, 'app', 'inventories'), {
+        data: { ...kidInventories, [kidId]: newInventory }
+      });
+      
+      await updateDoc(doc(db, 'app', 'kids'), { 
+        data: updatedKids 
+      });
+      
+      alert(`Successfully bought ${item.name}!`);
+    } catch (error) {
+      console.error('Error buying item:', error);
+      alert('Error purchasing item. Please try again.');
     }
   };
   
@@ -448,7 +473,7 @@ export default function ChoreTrackerApp() {
   const VirtualPetGame = ({ kid, petState, inventory, updatePetState, updateCoins, upgradePet, changePet, onOpenShop, onOpenGames, equipItem }) => {
     const [showPetSelector, setShowPetSelector] = useState(false);
     const petType = PET_TYPES[kid.petType] || PET_TYPES.dog;
-    const equippedBg = inventory.backgrounds.length > 0 ? 
+    const equippedBg = inventory.backgrounds && inventory.backgrounds.length > 0 && inventory.equipped && inventory.equipped.backgrounds ? 
       SHOP_ITEMS.backgrounds.find(bg => bg.id === inventory.equipped.backgrounds) : null;
     const bgClass = equippedBg ? equippedBg.gradient : 'from-sky-200 to-green-200';
     const upgradeCost = kid.petLevel * 10;
@@ -473,9 +498,9 @@ export default function ChoreTrackerApp() {
       }
     };
     
-    const equippedClothing = inventory.equipped.clothing ? 
+    const equippedClothing = inventory.equipped && inventory.equipped.clothing ? 
       SHOP_ITEMS.clothing.find(i => i.id === inventory.equipped.clothing) : null;
-    const equippedAccessory = inventory.equipped.accessories ? 
+    const equippedAccessory = inventory.equipped && inventory.equipped.accessories ? 
       SHOP_ITEMS.accessories.find(i => i.id === inventory.equipped.accessories) : null;
     
     return (
@@ -593,13 +618,14 @@ export default function ChoreTrackerApp() {
           </button>
         </div>
         
-        {inventory.clothing.length > 0 && (
+        {inventory.clothing && inventory.clothing.length > 0 && (
           <div className="mt-4">
             <h4 className="font-bold mb-2">Your Wardrobe:</h4>
             <div className="flex gap-2 flex-wrap">
               {inventory.clothing.map(itemId => {
                 const item = SHOP_ITEMS.clothing.find(i => i.id === itemId);
-                const isEquipped = inventory.equipped.clothing === itemId;
+                if (!item) return null;
+                const isEquipped = inventory.equipped && inventory.equipped.clothing === itemId;
                 return (
                   <button
                     key={itemId}
@@ -897,17 +923,18 @@ export default function ChoreTrackerApp() {
             </h4>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {SHOP_ITEMS.clothing.map(item => {
-                const owned = inventory.clothing.includes(item.id);
+                const owned = inventory.clothing && inventory.clothing.includes(item.id);
+                const canAfford = kid.coins >= item.price;
                 return (
                   <button
                     key={item.id}
-                    onClick={() => !owned && onBuy(item, 'clothing')}
-                    disabled={owned || kid.coins < item.price}
+                    onClick={() => !owned && canAfford && onBuy(item, 'clothing')}
+                    disabled={owned || !canAfford}
                     className={`p-4 rounded-xl border-2 transition ${
                       owned 
                         ? 'bg-green-100 border-green-500' 
-                        : kid.coins >= item.price
-                        ? 'border-gray-200 hover:border-purple-400'
+                        : canAfford
+                        ? 'border-gray-200 hover:border-purple-400 hover:scale-105'
                         : 'border-gray-200 opacity-50 cursor-not-allowed'
                     }`}
                   >
@@ -926,17 +953,18 @@ export default function ChoreTrackerApp() {
             <h4 className="font-bold text-lg mb-3">🎮 Accessories</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {SHOP_ITEMS.accessories.map(item => {
-                const owned = inventory.accessories.includes(item.id);
+                const owned = inventory.accessories && inventory.accessories.includes(item.id);
+                const canAfford = kid.coins >= item.price;
                 return (
                   <button
                     key={item.id}
-                    onClick={() => !owned && onBuy(item, 'accessories')}
-                    disabled={owned || kid.coins < item.price}
+                    onClick={() => !owned && canAfford && onBuy(item, 'accessories')}
+                    disabled={owned || !canAfford}
                     className={`p-4 rounded-xl border-2 transition ${
                       owned 
                         ? 'bg-green-100 border-green-500' 
-                        : kid.coins >= item.price
-                        ? 'border-gray-200 hover:border-purple-400'
+                        : canAfford
+                        ? 'border-gray-200 hover:border-purple-400 hover:scale-105'
                         : 'border-gray-200 opacity-50 cursor-not-allowed'
                     }`}
                   >
@@ -955,17 +983,18 @@ export default function ChoreTrackerApp() {
             <h4 className="font-bold text-lg mb-3">🌈 Backgrounds</h4>
             <div className="grid grid-cols-2 gap-3">
               {SHOP_ITEMS.backgrounds.map(item => {
-                const owned = inventory.backgrounds.includes(item.id);
+                const owned = inventory.backgrounds && inventory.backgrounds.includes(item.id);
+                const canAfford = kid.coins >= item.price;
                 return (
                   <button
                     key={item.id}
-                    onClick={() => !owned && onBuy(item, 'backgrounds')}
-                    disabled={owned || kid.coins < item.price}
+                    onClick={() => !owned && canAfford && onBuy(item, 'backgrounds')}
+                    disabled={owned || !canAfford}
                     className={`p-4 rounded-xl border-2 transition ${
                       owned 
                         ? 'bg-green-100 border-green-500' 
-                        : kid.coins >= item.price
-                        ? 'border-gray-200 hover:border-purple-400'
+                        : canAfford
+                        ? 'border-gray-200 hover:border-purple-400 hover:scale-105'
                         : 'border-gray-200 opacity-50 cursor-not-allowed'
                     }`}
                   >
