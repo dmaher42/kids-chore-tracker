@@ -1,37 +1,111 @@
 import { useState, useEffect } from 'react';
 import { Users, Home, Settings, Plus, Trash2, DollarSign, Star, Award } from 'lucide-react';
 
+// Firebase imports
+import { db } from './firebase';
+import { collection, doc, setDoc, getDoc, updateDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
+
 // Main App Component
 export default function ChoreTrackerApp() {
   const [isParent, setIsParent] = useState(false);
   const [parentPassword, setParentPassword] = useState('');
-  const [currentView, setCurrentView] = useState('select'); // select, kid, parent
+  const [currentView, setCurrentView] = useState('select');
   const [selectedKid, setSelectedKid] = useState(null);
+  const [loading, setLoading] = useState(true);
   
-  // Demo data structure - in real app this comes from Firebase
-  const [kids, setKids] = useState([
-    { id: 1, name: 'Nash', age: 13, coins: 0, streak: 0, petLevel: 1 },
-    { id: 2, name: 'Isla', age: 10, coins: 0, streak: 0, petLevel: 1 },
-    { id: 3, name: 'Archer', age: 8, coins: 0, streak: 0, petLevel: 1 }
-  ]);
+  const [kids, setKids] = useState([]);
+  const [chores, setChores] = useState([]);
+  const [dailyProgress, setDailyProgress] = useState({});
+  const [petStates, setPetStates] = useState({});
   
-  const [chores, setChores] = useState([
-    { id: 1, name: 'Empty Dishwasher', value: 2, icon: '🍽️' },
-    { id: 2, name: 'Make Bed', value: 1, icon: '🛏️' },
-    { id: 3, name: 'Put Clothes Away', value: 1, icon: '👕' },
-    { id: 4, name: 'Take Out Trash', value: 2, icon: '🗑️' },
-    { id: 5, name: 'Feed Pet', value: 1, icon: '🐕' }
-  ]);
+  // Initialize Firebase data
+  useEffect(() => {
+    const initializeData = async () => {
+      try {
+        // Check if data exists
+        const kidsDoc = await getDoc(doc(db, 'app', 'kids'));
+        
+        if (!kidsDoc.exists()) {
+          // Initialize with default data
+          const initialKids = [
+            { id: 1, name: 'Nash', age: 13, coins: 0, streak: 0, petLevel: 1 },
+            { id: 2, name: 'Isla', age: 10, coins: 0, streak: 0, petLevel: 1 },
+            { id: 3, name: 'Archer', age: 8, coins: 0, streak: 0, petLevel: 1 }
+          ];
+          
+          const initialChores = [
+            { id: 1, name: 'Empty Dishwasher', value: 2, icon: '🍽️' },
+            { id: 2, name: 'Make Bed', value: 1, icon: '🛏️' },
+            { id: 3, name: 'Put Clothes Away', value: 1, icon: '👕' },
+            { id: 4, name: 'Take Out Trash', value: 2, icon: '🗑️' },
+            { id: 5, name: 'Feed Pet', value: 1, icon: '🐕' }
+          ];
+          
+          await setDoc(doc(db, 'app', 'kids'), { data: initialKids });
+          await setDoc(doc(db, 'app', 'chores'), { data: initialChores });
+          await setDoc(doc(db, 'app', 'dailyProgress'), { data: { 1: [], 2: [], 3: [] } });
+          await setDoc(doc(db, 'app', 'petStates'), { 
+            data: { 
+              1: { food: 50, happy: 50 },
+              2: { food: 50, happy: 50 },
+              3: { food: 50, happy: 50 }
+            } 
+          });
+        }
+        
+        setLoading(false);
+      } catch (error) {
+        console.error('Error initializing data:', error);
+        setLoading(false);
+      }
+    };
+    
+    initializeData();
+  }, []);
   
-  const [dailyProgress, setDailyProgress] = useState({
-    1: [], // Nash's completed chores
-    2: [], // Isla's completed chores
-    3: []  // Archer's completed chores
-  });
+  // Listen to kids data
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, 'app', 'kids'), (doc) => {
+      if (doc.exists()) {
+        setKids(doc.data().data || []);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+  
+  // Listen to chores data
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, 'app', 'chores'), (doc) => {
+      if (doc.exists()) {
+        setChores(doc.data().data || []);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+  
+  // Listen to daily progress
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, 'app', 'dailyProgress'), (doc) => {
+      if (doc.exists()) {
+        setDailyProgress(doc.data().data || {});
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+  
+  // Listen to pet states
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, 'app', 'petStates'), (doc) => {
+      if (doc.exists()) {
+        setPetStates(doc.data().data || {});
+      }
+    });
+    return () => unsubscribe();
+  }, []);
   
   // Parent Login
   const handleParentLogin = () => {
-    if (parentPassword === 'parent123') { // Demo password
+    if (parentPassword === 'parent123') {
       setIsParent(true);
       setCurrentView('parent');
     } else {
@@ -40,29 +114,70 @@ export default function ChoreTrackerApp() {
   };
   
   // Toggle chore completion
-  const toggleChore = (kidId, choreId) => {
-    setDailyProgress(prev => {
-      const kidChores = prev[kidId] || [];
-      if (kidChores.includes(choreId)) {
-        return { ...prev, [kidId]: kidChores.filter(id => id !== choreId) };
-      } else {
-        // Check if all chores done, add bonus
-        const newChores = [...kidChores, choreId];
-        const allDone = newChores.length === chores.length;
-        
-        const chore = chores.find(c => c.id === choreId);
-        const coinsToAdd = chore.value + (allDone ? 5 : 0); // Bonus for completing all
-        
-        setKids(prev => prev.map(k => 
-          k.id === kidId 
-            ? { ...k, coins: k.coins + coinsToAdd, streak: allDone ? k.streak + 1 : k.streak }
-            : k
-        ));
-        
-        return { ...prev, [kidId]: newChores };
-      }
+  const toggleChore = async (kidId, choreId) => {
+    const kidChores = dailyProgress[kidId] || [];
+    let newChores;
+    
+    if (kidChores.includes(choreId)) {
+      // Uncomplete chore
+      newChores = kidChores.filter(id => id !== choreId);
+      const chore = chores.find(c => c.id === choreId);
+      const updatedKids = kids.map(k => 
+        k.id === kidId ? { ...k, coins: Math.max(0, k.coins - chore.value) } : k
+      );
+      await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
+    } else {
+      // Complete chore
+      newChores = [...kidChores, choreId];
+      const allDone = newChores.length === chores.length;
+      const chore = chores.find(c => c.id === choreId);
+      const coinsToAdd = chore.value + (allDone ? 5 : 0);
+      
+      const updatedKids = kids.map(k => 
+        k.id === kidId 
+          ? { ...k, coins: k.coins + coinsToAdd, streak: allDone ? k.streak + 1 : k.streak }
+          : k
+      );
+      await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
+    }
+    
+    await updateDoc(doc(db, 'app', 'dailyProgress'), {
+      data: { ...dailyProgress, [kidId]: newChores }
     });
   };
+  
+  // Update pet state
+  const updatePetState = async (kidId, updates) => {
+    const newPetStates = {
+      ...petStates,
+      [kidId]: { ...petStates[kidId], ...updates }
+    };
+    await updateDoc(doc(db, 'app', 'petStates'), { data: newPetStates });
+  };
+  
+  // Update kid coins
+  const updateKidCoins = async (kidId, coinsToSubtract) => {
+    const updatedKids = kids.map(k => 
+      k.id === kidId ? { ...k, coins: Math.max(0, k.coins - coinsToSubtract) } : k
+    );
+    await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
+  };
+  
+  // Update pet level
+  const upgradePetLevel = async (kidId) => {
+    const updatedKids = kids.map(k => 
+      k.id === kidId ? { ...k, coins: Math.max(0, k.coins - 10), petLevel: k.petLevel + 1 } : k
+    );
+    await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
+  };
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center">
+        <div className="text-white text-2xl">Loading...</div>
+      </div>
+    );
+  }
   
   // Kid Selection Screen
   const KidSelectScreen = () => (
@@ -142,6 +257,8 @@ export default function ChoreTrackerApp() {
     const completedChores = dailyProgress[selectedKid] || [];
     const allDone = completedChores.length === chores.length;
     
+    if (!kid) return null;
+    
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-400 to-blue-500 p-6">
         <div className="max-w-4xl mx-auto">
@@ -203,40 +320,39 @@ export default function ChoreTrackerApp() {
             )}
           </div>
           
-          {allDone && <VirtualPetGame kid={kid} setKids={setKids} />}
+          {allDone && (
+            <VirtualPetGame 
+              kid={kid} 
+              petState={petStates[selectedKid] || { food: 50, happy: 50 }}
+              updatePetState={(updates) => updatePetState(selectedKid, updates)}
+              updateCoins={(amount) => updateKidCoins(selectedKid, amount)}
+              upgradePet={() => upgradePetLevel(selectedKid)}
+            />
+          )}
         </div>
       </div>
     );
   };
   
   // Virtual Pet Game Component
-  const VirtualPetGame = ({ kid, setKids }) => {
-    const [petFood, setPetFood] = useState(50);
-    const [petHappy, setPetHappy] = useState(50);
-    
+  const VirtualPetGame = ({ kid, petState, updatePetState, updateCoins, upgradePet }) => {
     const feedPet = () => {
       if (kid.coins >= 3) {
-        setKids(prev => prev.map(k => 
-          k.id === kid.id ? { ...k, coins: k.coins - 3 } : k
-        ));
-        setPetFood(Math.min(100, petFood + 20));
+        updateCoins(3);
+        updatePetState({ food: Math.min(100, petState.food + 20) });
       }
     };
     
     const playWithPet = () => {
       if (kid.coins >= 2) {
-        setKids(prev => prev.map(k => 
-          k.id === kid.id ? { ...k, coins: k.coins - 2 } : k
-        ));
-        setPetHappy(Math.min(100, petHappy + 20));
+        updateCoins(2);
+        updatePetState({ happy: Math.min(100, petState.happy + 20) });
       }
     };
     
-    const upgradePet = () => {
+    const handleUpgrade = () => {
       if (kid.coins >= 10) {
-        setKids(prev => prev.map(k => 
-          k.id === kid.id ? { ...k, coins: k.coins - 10, petLevel: k.petLevel + 1 } : k
-        ));
+        upgradePet();
       }
     };
     
@@ -255,14 +371,14 @@ export default function ChoreTrackerApp() {
           <div className="absolute bottom-4 left-4 right-4">
             <div className="mb-2">
               <div className="flex justify-between text-sm mb-1">
-                <span>Food: {petFood}%</span>
-                <span>Happiness: {petHappy}%</span>
+                <span>Food: {petState.food}%</span>
+                <span>Happiness: {petState.happy}%</span>
               </div>
               <div className="bg-gray-200 rounded-full h-2">
-                <div className="bg-orange-500 h-2 rounded-full" style={{ width: `${petFood}%` }}></div>
+                <div className="bg-orange-500 h-2 rounded-full" style={{ width: `${petState.food}%` }}></div>
               </div>
               <div className="bg-gray-200 rounded-full h-2 mt-1">
-                <div className="bg-pink-500 h-2 rounded-full" style={{ width: `${petHappy}%` }}></div>
+                <div className="bg-pink-500 h-2 rounded-full" style={{ width: `${petState.happy}%` }}></div>
               </div>
             </div>
           </div>
@@ -286,7 +402,7 @@ export default function ChoreTrackerApp() {
             <span className="text-sm">(2 coins)</span>
           </button>
           <button
-            onClick={upgradePet}
+            onClick={handleUpgrade}
             disabled={kid.coins < 10}
             className="bg-purple-500 text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-purple-600 transition"
           >
@@ -304,34 +420,44 @@ export default function ChoreTrackerApp() {
     const [newChoreValue, setNewChoreValue] = useState(1);
     const [newChoreIcon, setNewChoreIcon] = useState('✅');
     
-    const addChore = () => {
+    const addChore = async () => {
       if (newChoreName.trim()) {
-        setChores([...chores, {
+        const newChore = {
           id: Date.now(),
           name: newChoreName,
           value: newChoreValue,
           icon: newChoreIcon
-        }]);
+        };
+        await updateDoc(doc(db, 'app', 'chores'), {
+          data: [...chores, newChore]
+        });
         setNewChoreName('');
         setNewChoreValue(1);
         setNewChoreIcon('✅');
       }
     };
     
-    const deleteChore = (id) => {
-      setChores(chores.filter(c => c.id !== id));
+    const deleteChore = async (id) => {
+      await updateDoc(doc(db, 'app', 'chores'), {
+        data: chores.filter(c => c.id !== id)
+      });
     };
     
-    const resetDaily = () => {
+    const resetDaily = async () => {
       if (window.confirm('Reset all daily progress? This will keep coins and streaks.')) {
-        setDailyProgress({ 1: [], 2: [], 3: [] });
+        await updateDoc(doc(db, 'app', 'dailyProgress'), {
+          data: { 1: [], 2: [], 3: [] }
+        });
       }
     };
     
-    const weeklyPayout = () => {
+    const weeklyPayout = async () => {
       if (window.confirm('Process weekly payout? This will reset coins to 0.')) {
-        setKids(kids.map(k => ({ ...k, coins: 0 })));
-        setDailyProgress({ 1: [], 2: [], 3: [] });
+        const resetKids = kids.map(k => ({ ...k, coins: 0 }));
+        await updateDoc(doc(db, 'app', 'kids'), { data: resetKids });
+        await updateDoc(doc(db, 'app', 'dailyProgress'), {
+          data: { 1: [], 2: [], 3: [] }
+        });
       }
     };
     
