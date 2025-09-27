@@ -684,14 +684,9 @@ export default function ChoreTrackerApp() {
       }
     };
     
-    const equippedClothing = inventory.equipped && inventory.equipped.clothing ? 
+    const equippedClothing = inventory.equipped && inventory.equipped.clothing ?
       SHOP_ITEMS.clothing.find(i => i.id === inventory.equipped.clothing) : null;
-    const equippedAccessory = inventory.equipped && inventory.equipped.accessories ? 
-      SHOP_ITEMS.accessories.find(i => i.id === inventory.equipped.accessories) : null;
-    
-    const equippedClothing = inventory.equipped && inventory.equipped.clothing ? 
-      SHOP_ITEMS.clothing.find(i => i.id === inventory.equipped.clothing) : null;
-    const equippedAccessory = inventory.equipped && inventory.equipped.accessories ? 
+    const equippedAccessory = inventory.equipped && inventory.equipped.accessories ?
       SHOP_ITEMS.accessories.find(i => i.id === inventory.equipped.accessories) : null;
     
     const getAnimationClass = (anim) => {
@@ -1293,48 +1288,128 @@ export default function ChoreTrackerApp() {
     const [newChoreName, setNewChoreName] = useState('');
     const [newChoreValue, setNewChoreValue] = useState(1);
     const [newChoreIcon, setNewChoreIcon] = useState('✅');
-    
+    const [isSavingChore, setIsSavingChore] = useState(false);
+    const [isResettingDaily, setIsResettingDaily] = useState(false);
+    const [isProcessingPayout, setIsProcessingPayout] = useState(false);
+    const [parentActionMessage, setParentActionMessage] = useState(null);
+    const [parentActionType, setParentActionType] = useState('success');
+
+    const setFeedback = (type, message) => {
+      setParentActionType(type);
+      setParentActionMessage(message);
+    };
+
     const addChore = async () => {
-      if (newChoreName.trim()) {
-        const newChore = {
-          id: Date.now(),
-          name: newChoreName,
-          value: newChoreValue,
-          icon: newChoreIcon
-        };
+      const trimmedName = newChoreName.trim();
+      if (!trimmedName) {
+        setFeedback('error', 'Please enter a name for the new chore.');
+        return;
+      }
+
+      const newChore = {
+        id: Date.now(),
+        name: trimmedName,
+        value: newChoreValue,
+        icon: newChoreIcon
+      };
+
+      const previousChores = chores;
+      const updatedChores = [...chores, newChore];
+
+      try {
+        setIsSavingChore(true);
+        setChores(updatedChores);
         await setDoc(doc(db, 'app', 'chores'), {
-          data: [...chores, newChore]
+          data: updatedChores
         }, { merge: true });
         setNewChoreName('');
         setNewChoreValue(1);
         setNewChoreIcon('✅');
+        setFeedback('success', 'Chore added successfully.');
+      } catch (error) {
+        console.error('Error adding chore:', error);
+        setChores(previousChores);
+        setFeedback('error', 'Could not add the chore. Please try again.');
+      } finally {
+        setIsSavingChore(false);
       }
     };
-    
+
     const deleteChore = async (id) => {
-      await setDoc(doc(db, 'app', 'chores'), {
-        data: chores.filter(c => c.id !== id)
-      }, { merge: true });
+      const previousChores = chores;
+      const updatedChores = chores.filter(c => c.id !== id);
+
+      try {
+        setIsSavingChore(true);
+        setChores(updatedChores);
+        await setDoc(doc(db, 'app', 'chores'), {
+          data: updatedChores
+        }, { merge: true });
+        setFeedback('success', 'Chore removed.');
+      } catch (error) {
+        console.error('Error deleting chore:', error);
+        setChores(previousChores);
+        setFeedback('error', 'Could not delete the chore. Please try again.');
+      } finally {
+        setIsSavingChore(false);
+      }
     };
-    
+
     const resetDaily = async () => {
       if (window.confirm('Reset all daily progress? This will keep coins and streaks.')) {
-        await setDoc(doc(db, 'app', 'dailyProgress'), {
-          data: { 1: [], 2: [], 3: [] }
-        }, { merge: true });
+        const previousProgress = dailyProgress;
+        const resetProgress = kids.reduce((acc, kid) => {
+          acc[kid.id] = [];
+          return acc;
+        }, {});
+
+        try {
+          setIsResettingDaily(true);
+          setDailyProgress(resetProgress);
+          await setDoc(doc(db, 'app', 'dailyProgress'), {
+            data: resetProgress
+          }, { merge: true });
+          setFeedback('success', 'Daily progress reset for everyone.');
+        } catch (error) {
+          console.error('Error resetting daily progress:', error);
+          setDailyProgress(previousProgress);
+          setFeedback('error', 'Could not reset daily progress. Please try again.');
+        } finally {
+          setIsResettingDaily(false);
+        }
       }
     };
-    
+
     const weeklyPayout = async () => {
       if (window.confirm('Process weekly payout? This will reset coins to 0.')) {
+        const previousKids = kids;
+        const previousProgress = dailyProgress;
         const resetKids = kids.map(k => ({ ...k, coins: 0 }));
-        await updateDoc(doc(db, 'app', 'kids'), { data: resetKids });
-        await setDoc(doc(db, 'app', 'dailyProgress'), {
-          data: { 1: [], 2: [], 3: [] }
-        }, { merge: true });
+        const resetProgress = kids.reduce((acc, kid) => {
+          acc[kid.id] = [];
+          return acc;
+        }, {});
+
+        try {
+          setIsProcessingPayout(true);
+          setKids(resetKids);
+          setDailyProgress(resetProgress);
+          await updateDoc(doc(db, 'app', 'kids'), { data: resetKids });
+          await setDoc(doc(db, 'app', 'dailyProgress'), {
+            data: resetProgress
+          }, { merge: true });
+          setFeedback('success', 'Weekly payout processed and coins reset.');
+        } catch (error) {
+          console.error('Error processing weekly payout:', error);
+          setKids(previousKids);
+          setDailyProgress(previousProgress);
+          setFeedback('error', 'Could not process the weekly payout. Please try again.');
+        } finally {
+          setIsProcessingPayout(false);
+        }
       }
     };
-    
+
     return (
       <div className="min-h-screen bg-gray-100 p-6">
         <div className="max-w-6xl mx-auto">
@@ -1347,7 +1422,19 @@ export default function ChoreTrackerApp() {
               Exit
             </button>
           </div>
-          
+
+          {parentActionMessage && (
+            <div
+              className={`mb-6 rounded-lg px-4 py-3 ${
+                parentActionType === 'success'
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-red-100 text-red-700'
+              }`}
+            >
+              {parentActionMessage}
+            </div>
+          )}
+
           <div className="grid md:grid-cols-3 gap-4 mb-6">
             {kids.map(kid => {
               const ownedPets = kidPets[kid.id] || [];
@@ -1423,12 +1510,17 @@ export default function ChoreTrackerApp() {
               />
               <button
                 onClick={addChore}
-                className="bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 flex items-center justify-center gap-2"
+                disabled={isSavingChore}
+                className={`flex items-center justify-center gap-2 rounded-lg py-2 text-white transition ${
+                  isSavingChore
+                    ? 'cursor-not-allowed bg-blue-300'
+                    : 'bg-blue-500 hover:bg-blue-600'
+                }`}
               >
                 <Plus size={20} /> Add Chore
               </button>
             </div>
-            
+
             <div className="space-y-2">
               {chores.map(chore => (
                 <div key={chore.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
@@ -1440,7 +1532,12 @@ export default function ChoreTrackerApp() {
                     <span className="text-yellow-600 font-bold">${chore.value}</span>
                     <button
                       onClick={() => deleteChore(chore.id)}
-                      className="text-red-500 hover:text-red-700"
+                      disabled={isSavingChore}
+                      className={`transition ${
+                        isSavingChore
+                          ? 'cursor-not-allowed text-red-300'
+                          : 'text-red-500 hover:text-red-700'
+                      }`}
                     >
                       <Trash2 size={20} />
                     </button>
@@ -1453,15 +1550,25 @@ export default function ChoreTrackerApp() {
           <div className="grid md:grid-cols-2 gap-4">
             <button
               onClick={resetDaily}
-              className="bg-orange-500 text-white py-3 rounded-lg hover:bg-orange-600"
+              disabled={isResettingDaily}
+              className={`rounded-lg py-3 text-white transition ${
+                isResettingDaily
+                  ? 'cursor-not-allowed bg-orange-300'
+                  : 'bg-orange-500 hover:bg-orange-600'
+              }`}
             >
-              Reset Daily Progress
+              {isResettingDaily ? 'Resetting…' : 'Reset Daily Progress'}
             </button>
             <button
               onClick={weeklyPayout}
-              className="bg-green-500 text-white py-3 rounded-lg hover:bg-green-600"
+              disabled={isProcessingPayout}
+              className={`rounded-lg py-3 text-white transition ${
+                isProcessingPayout
+                  ? 'cursor-not-allowed bg-green-300'
+                  : 'bg-green-500 hover:bg-green-600'
+              }`}
             >
-              Process Weekly Payout
+              {isProcessingPayout ? 'Processing…' : 'Process Weekly Payout'}
             </button>
           </div>
         </div>
