@@ -3,7 +3,7 @@ import { Users, Home, Settings, Plus, Trash2, DollarSign, Star, Award, ShoppingB
 
 // Firebase imports
 import { db } from './firebase';
-import { collection, doc, setDoc, getDoc, updateDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 
 // Pet evolution stages (5 levels!)
 const PET_TYPES = {
@@ -247,10 +247,11 @@ export default function ChoreTrackerApp() {
     }
     
     try {
-      // Update inventory
+      // Update inventory and AUTO-EQUIP the item!
       const newInventory = {
         ...inventory,
-        [category]: [...(inventory[category] || []), item.id]
+        [category]: [...(inventory[category] || []), item.id],
+        equipped: { ...(inventory.equipped || {}), [category]: item.id } // Auto-equip!
       };
       
       // Update coins
@@ -258,7 +259,7 @@ export default function ChoreTrackerApp() {
         k.id === kidId ? { ...k, coins: k.coins - item.price } : k
       );
       
-      // Update inventory in Firebase (use setDoc with merge to create if doesn't exist)
+      // Update inventory in Firebase
       await setDoc(doc(db, 'app', 'inventories'), {
         data: { ...kidInventories, [kidId]: newInventory }
       }, { merge: true });
@@ -268,7 +269,7 @@ export default function ChoreTrackerApp() {
         data: updatedKids 
       });
       
-      alert(`Successfully bought ${item.name}!`);
+      alert(`Successfully bought and equipped ${item.name}! 🎉`);
     } catch (error) {
       console.error('Error buying item:', error);
       alert('Error purchasing item. Please try again.');
@@ -304,13 +305,24 @@ export default function ChoreTrackerApp() {
         <div className="grid gap-4 md:grid-cols-3 mb-8">
           {kids.map(kid => {
             const petType = PET_TYPES[kid.petType] || PET_TYPES.dog;
+            const kidInventory = kidInventories[kid.id] || { clothing: [], accessories: [], backgrounds: [], equipped: {} };
+            const equippedClothing = kidInventory.equipped && kidInventory.equipped.clothing ? 
+              SHOP_ITEMS.clothing.find(i => i.id === kidInventory.equipped.clothing) : null;
+            
             return (
               <button
                 key={kid.id}
                 onClick={() => { setSelectedKid(kid.id); setCurrentView('kid'); }}
-                className="bg-white rounded-2xl p-6 shadow-lg hover:scale-105 transition-transform"
+                className="bg-white rounded-2xl p-6 shadow-lg hover:scale-105 transition-transform relative"
               >
-                <div className="text-6xl mb-2 text-center">{petType.levels[kid.petLevel - 1]}</div>
+                <div className="relative">
+                  <div className="text-6xl mb-2 text-center animate-bounce">{petType.levels[kid.petLevel - 1]}</div>
+                  {equippedClothing && (
+                    <div className="text-2xl absolute top-0 left-1/2 transform -translate-x-1/2 animate-pulse">
+                      {equippedClothing.emoji}
+                    </div>
+                  )}
+                </div>
                 <div className="text-sm text-gray-500 text-center mb-2">{LEVEL_NAMES[kid.petLevel - 1]} {petType.name}</div>
                 <h3 className="text-2xl font-bold text-center mb-2">{kid.name}</h3>
                 <div className="flex justify-center items-center gap-2 text-yellow-600">
@@ -475,16 +487,30 @@ export default function ChoreTrackerApp() {
   
   const VirtualPetGame = ({ kid, petState, inventory, updatePetState, updateCoins, upgradePet, changePet, onOpenShop, onOpenGames, equipItem }) => {
     const [showPetSelector, setShowPetSelector] = useState(false);
+    const [petAnimation, setPetAnimation] = useState('bounce');
     const petType = PET_TYPES[kid.petType] || PET_TYPES.dog;
     const equippedBg = inventory.backgrounds && inventory.backgrounds.length > 0 && inventory.equipped && inventory.equipped.backgrounds ? 
       SHOP_ITEMS.backgrounds.find(bg => bg.id === inventory.equipped.backgrounds) : null;
     const bgClass = equippedBg ? equippedBg.gradient : 'from-sky-200 to-green-200';
     const upgradeCost = kid.petLevel * 10;
     
+    // Cycle through animations
+    useEffect(() => {
+      const animations = ['bounce', 'pulse', 'wiggle', 'float'];
+      let index = 0;
+      const interval = setInterval(() => {
+        index = (index + 1) % animations.length;
+        setPetAnimation(animations[index]);
+      }, 3000);
+      return () => clearInterval(interval);
+    }, []);
+    
     const feedPet = () => {
       if (kid.coins >= 3) {
         updateCoins(3);
         updatePetState({ food: Math.min(100, petState.food + 20) });
+        setPetAnimation('jump');
+        setTimeout(() => setPetAnimation('bounce'), 500);
       }
     };
     
@@ -492,12 +518,16 @@ export default function ChoreTrackerApp() {
       if (kid.coins >= 2) {
         updateCoins(2);
         updatePetState({ happy: Math.min(100, petState.happy + 20) });
+        setPetAnimation('spin');
+        setTimeout(() => setPetAnimation('bounce'), 500);
       }
     };
     
     const handleUpgrade = () => {
       if (kid.coins >= upgradeCost && kid.petLevel < 5) {
         upgradePet();
+        setPetAnimation('tada');
+        setTimeout(() => setPetAnimation('bounce'), 1000);
       }
     };
     
@@ -506,8 +536,52 @@ export default function ChoreTrackerApp() {
     const equippedAccessory = inventory.equipped && inventory.equipped.accessories ? 
       SHOP_ITEMS.accessories.find(i => i.id === inventory.equipped.accessories) : null;
     
+    const getAnimationClass = (anim) => {
+      switch(anim) {
+        case 'bounce': return 'animate-bounce';
+        case 'pulse': return 'animate-pulse';
+        case 'wiggle': return 'animate-wiggle';
+        case 'float': return 'animate-float';
+        case 'jump': return 'animate-jump';
+        case 'spin': return 'animate-spin-once';
+        case 'tada': return 'animate-tada';
+        default: return 'animate-bounce';
+      }
+    };
+    
     return (
       <div className="bg-white rounded-2xl p-6 shadow-xl">
+        <style>{`
+          @keyframes wiggle {
+            0%, 100% { transform: rotate(-3deg); }
+            50% { transform: rotate(3deg); }
+          }
+          @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+          }
+          @keyframes jump {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-30px); }
+          }
+          @keyframes spin-once {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+          @keyframes tada {
+            0% { transform: scale(1) rotate(0deg); }
+            10%, 20% { transform: scale(0.9) rotate(-3deg); }
+            30%, 50%, 70%, 90% { transform: scale(1.1) rotate(3deg); }
+            40%, 60%, 80% { transform: scale(1.1) rotate(-3deg); }
+            100% { transform: scale(1) rotate(0deg); }
+          }
+          .animate-wiggle { animation: wiggle 1s ease-in-out infinite; }
+          .animate-float { animation: float 2s ease-in-out infinite; }
+          .animate-jump { animation: jump 0.5s ease-out; }
+          .animate-spin-once { animation: spin-once 0.5s ease-out; }
+          .animate-tada { animation: tada 1s ease-out; }
+        `}</style>
+        
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-2xl font-bold">🏠 Your Virtual Pet</h3>
           <div className="flex gap-2">
@@ -528,24 +602,26 @@ export default function ChoreTrackerApp() {
           </div>
         </div>
         
-        <div className={`bg-gradient-to-b ${bgClass} rounded-xl p-6 mb-4 min-h-64 relative`}>
-          <div className="text-center">
+        <div className={`bg-gradient-to-b ${bgClass} rounded-xl p-6 mb-4 min-h-64 relative overflow-hidden`}>
+          <div className="text-center relative">
             <button
               onClick={() => setShowPetSelector(!showPetSelector)}
-              className="text-8xl mb-2 hover:scale-110 transition-transform cursor-pointer"
+              className={`text-8xl mb-2 hover:scale-110 transition-transform cursor-pointer inline-block ${getAnimationClass(petAnimation)}`}
             >
               {petType.levels[kid.petLevel - 1]}
             </button>
+            
             {equippedClothing && (
-              <div className="text-4xl absolute top-16 left-1/2 transform -translate-x-1/2">
+              <div className="text-4xl absolute top-4 left-1/2 transform -translate-x-1/2 animate-pulse pointer-events-none">
                 {equippedClothing.emoji}
               </div>
             )}
             {equippedAccessory && (
-              <div className="text-3xl absolute top-32 left-1/2 transform -translate-x-1/2">
+              <div className="text-3xl absolute bottom-16 left-1/2 transform -translate-x-1/2 animate-bounce pointer-events-none">
                 {equippedAccessory.emoji}
               </div>
             )}
+            
             <div className="text-xl font-bold">{LEVEL_NAMES[kid.petLevel - 1]} {petType.name}</div>
             <div className="text-sm text-gray-600">Level {kid.petLevel}/5</div>
             <button
@@ -566,6 +642,7 @@ export default function ChoreTrackerApp() {
                     onClick={() => {
                       changePet(key);
                       setShowPetSelector(false);
+                      setPetAnimation('tada');
                     }}
                     className={`p-3 rounded-lg border-2 hover:border-blue-400 transition ${
                       kid.petType === key ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
@@ -586,10 +663,10 @@ export default function ChoreTrackerApp() {
                 <span>Happiness: {petState.happy}%</span>
               </div>
               <div className="bg-gray-200 rounded-full h-2">
-                <div className="bg-orange-500 h-2 rounded-full" style={{ width: `${petState.food}%` }}></div>
+                <div className="bg-orange-500 h-2 rounded-full transition-all duration-500" style={{ width: `${petState.food}%` }}></div>
               </div>
               <div className="bg-gray-200 rounded-full h-2 mt-1">
-                <div className="bg-pink-500 h-2 rounded-full" style={{ width: `${petState.happy}%` }}></div>
+                <div className="bg-pink-500 h-2 rounded-full transition-all duration-500" style={{ width: `${petState.happy}%` }}></div>
               </div>
             </div>
           </div>
@@ -599,7 +676,7 @@ export default function ChoreTrackerApp() {
           <button
             onClick={feedPet}
             disabled={kid.coins < 3}
-            className="bg-orange-500 text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-orange-600 transition"
+            className="bg-orange-500 text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-orange-600 hover:scale-105 transition-all"
           >
             🍖 Feed<br/>
             <span className="text-sm">(3 coins)</span>
@@ -607,7 +684,7 @@ export default function ChoreTrackerApp() {
           <button
             onClick={playWithPet}
             disabled={kid.coins < 2}
-            className="bg-pink-500 text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-pink-600 transition"
+            className="bg-pink-500 text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-pink-600 hover:scale-105 transition-all"
           >
             ⚽ Play<br/>
             <span className="text-sm">(2 coins)</span>
@@ -615,7 +692,7 @@ export default function ChoreTrackerApp() {
           <button
             onClick={handleUpgrade}
             disabled={kid.coins < upgradeCost || kid.petLevel >= 5}
-            className="bg-purple-500 text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-purple-600 transition"
+            className="bg-purple-500 text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-purple-600 hover:scale-105 transition-all"
           >
             {kid.petLevel === 5 ? '✨ MAX' : `⭐ Evolve (${upgradeCost})`}
           </button>
@@ -633,8 +710,32 @@ export default function ChoreTrackerApp() {
                   <button
                     key={itemId}
                     onClick={() => equipItem(itemId, 'clothing')}
-                    className={`p-2 rounded-lg border-2 ${
-                      isEquipped ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                    className={`p-2 rounded-lg border-2 transition-all hover:scale-110 ${
+                      isEquipped ? 'border-blue-500 bg-blue-50 animate-pulse' : 'border-gray-200'
+                    }`}
+                  >
+                    <div className="text-2xl">{item.emoji}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        
+        {inventory.accessories && inventory.accessories.length > 0 && (
+          <div className="mt-4">
+            <h4 className="font-bold mb-2">Your Accessories:</h4>
+            <div className="flex gap-2 flex-wrap">
+              {inventory.accessories.map(itemId => {
+                const item = SHOP_ITEMS.accessories.find(i => i.id === itemId);
+                if (!item) return null;
+                const isEquipped = inventory.equipped && inventory.equipped.accessories === itemId;
+                return (
+                  <button
+                    key={itemId}
+                    onClick={() => equipItem(itemId, 'accessories')}
+                    className={`p-2 rounded-lg border-2 transition-all hover:scale-110 ${
+                      isEquipped ? 'border-green-500 bg-green-50 animate-pulse' : 'border-gray-200'
                     }`}
                   >
                     <div className="text-2xl">{item.emoji}</div>
@@ -1029,9 +1130,9 @@ export default function ChoreTrackerApp() {
           value: newChoreValue,
           icon: newChoreIcon
         };
-        await updateDoc(doc(db, 'app', 'chores'), {
+        await setDoc(doc(db, 'app', 'chores'), {
           data: [...chores, newChore]
-        });
+        }, { merge: true });
         setNewChoreName('');
         setNewChoreValue(1);
         setNewChoreIcon('✅');
@@ -1039,9 +1140,9 @@ export default function ChoreTrackerApp() {
     };
     
     const deleteChore = async (id) => {
-      await updateDoc(doc(db, 'app', 'chores'), {
+      await setDoc(doc(db, 'app', 'chores'), {
         data: chores.filter(c => c.id !== id)
-      });
+      }, { merge: true });
     };
     
     const resetDaily = async () => {
