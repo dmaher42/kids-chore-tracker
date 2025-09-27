@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Users, Home, Settings, Plus, Trash2, DollarSign, Star, Award, ShoppingBag, Sparkles, Gamepad2, Zap, Trophy } from 'lucide-react';
+import Lottie from 'lottie-react';
 
 // Firebase imports
 import { db } from './firebase';
@@ -59,6 +60,43 @@ const SHOP_ITEMS = {
 
 const LEVEL_NAMES = ['Egg', 'Baby', 'Teen', 'Adult', 'Legendary'];
 
+// Lottie Pet Component for animated pets
+const LottiePet = ({ url, fallbackEmoji, size = 128, className = '' }) => {
+  const [animationData, setAnimationData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    fetch(url)
+      .then(res => res.json())
+      .then(data => {
+        setAnimationData(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to load Lottie:', err);
+        setLoading(false);
+      });
+  }, [url]);
+  
+  if (loading) {
+    return <div className="text-4xl animate-pulse">⏳</div>;
+  }
+  
+  if (!animationData) {
+    return <span className={className || 'text-8xl'}>{fallbackEmoji}</span>;
+  }
+  
+  return (
+    <div style={{ width: size, height: size }} className="inline-block">
+      <Lottie 
+        animationData={animationData}
+        loop={true}
+        autoplay={true}
+      />
+    </div>
+  );
+};
+
 // Main App Component
 export default function ChoreTrackerApp() {
   const [isParent, setIsParent] = useState(false);
@@ -72,6 +110,7 @@ export default function ChoreTrackerApp() {
   const [dailyProgress, setDailyProgress] = useState({});
   const [petStates, setPetStates] = useState({});
   const [kidInventories, setKidInventories] = useState({});
+  const [kidPets, setKidPets] = useState({}); // Track owned pets per kid
   
   useEffect(() => {
     const initializeData = async () => {
@@ -80,9 +119,9 @@ export default function ChoreTrackerApp() {
         
         if (!kidsDoc.exists()) {
           const initialKids = [
-            { id: 1, name: 'Nash', age: 13, coins: 0, streak: 0, petLevel: 1, petType: 'dog' },
-            { id: 2, name: 'Isla', age: 10, coins: 0, streak: 0, petLevel: 1, petType: 'cat' },
-            { id: 3, name: 'Archer', age: 8, coins: 0, streak: 0, petLevel: 1, petType: 'bunny' }
+            { id: 1, name: 'Nash', age: 13, coins: 20, streak: 0, petLevel: 1, petType: 'none', activePet: null },
+            { id: 2, name: 'Isla', age: 10, coins: 20, streak: 0, petLevel: 1, petType: 'none', activePet: null },
+            { id: 3, name: 'Archer', age: 8, coins: 20, streak: 0, petLevel: 1, petType: 'none', activePet: null }
           ];
           
           const initialChores = [
@@ -108,6 +147,13 @@ export default function ChoreTrackerApp() {
               1: { clothing: [], accessories: [], backgrounds: [], equipped: {} },
               2: { clothing: [], accessories: [], backgrounds: [], equipped: {} },
               3: { clothing: [], accessories: [], backgrounds: [], equipped: {} }
+            }
+          });
+          await setDoc(doc(db, 'app', 'kidPets'), {
+            data: {
+              1: [], // Array of owned pets: [{ type: 'dog', level: 1, id: timestamp }]
+              2: [],
+              3: []
             }
           });
         }
@@ -138,6 +184,9 @@ export default function ChoreTrackerApp() {
     const unsubscribe5 = onSnapshot(doc(db, 'app', 'inventories'), (doc) => {
       if (doc.exists()) setKidInventories(doc.data().data || {});
     });
+    const unsubscribe6 = onSnapshot(doc(db, 'app', 'kidPets'), (doc) => {
+      if (doc.exists()) setKidPets(doc.data().data || {});
+    });
     
     return () => {
       unsubscribe1();
@@ -145,6 +194,7 @@ export default function ChoreTrackerApp() {
       unsubscribe3();
       unsubscribe4();
       unsubscribe5();
+      unsubscribe6();
     };
   }, []);
   
@@ -224,10 +274,81 @@ export default function ChoreTrackerApp() {
   };
   
   const changePetType = async (kidId, petType) => {
+    // Now this sets the active pet from owned pets
+    const kid = kids.find(k => k.id === kidId);
+    const ownedPets = kidPets[kidId] || [];
+    const selectedPet = ownedPets.find(p => p.type === petType);
+    
+    if (selectedPet) {
+      const updatedKids = kids.map(k => 
+        k.id === kidId ? { ...k, petType: selectedPet.type, petLevel: selectedPet.level, activePet: selectedPet.id } : k
+      );
+      await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
+    }
+  };
+  
+  const buyEgg = async (kidId) => {
+    const kid = kids.find(k => k.id === kidId);
+    const eggCost = 15;
+    
+    if (kid.coins < eggCost) {
+      alert(`Not enough coins! You need ${eggCost} coins to buy an egg.`);
+      return;
+    }
+    
+    // Random pet types
+    const petTypes = ['dog', 'cat', 'bunny', 'dragon', 'unicorn'];
+    const randomPet = petTypes[Math.floor(Math.random() * petTypes.length)];
+    
+    // Create new pet
+    const newPet = {
+      id: Date.now(),
+      type: randomPet,
+      level: 1
+    };
+    
+    // Update owned pets
+    const currentPets = kidPets[kidId] || [];
+    const updatedPets = [...currentPets, newPet];
+    
+    await setDoc(doc(db, 'app', 'kidPets'), {
+      data: { ...kidPets, [kidId]: updatedPets }
+    }, { merge: true });
+    
+    // Deduct coins and set as active pet
     const updatedKids = kids.map(k => 
-      k.id === kidId ? { ...k, petType, petLevel: 1 } : k
+      k.id === kidId ? { 
+        ...k, 
+        coins: k.coins - eggCost,
+        petType: randomPet,
+        petLevel: 1,
+        activePet: newPet.id
+      } : k
     );
     await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
+    
+    // Show exciting hatch message
+    setTimeout(() => {
+      const petEmojis = { dog: '🐕', cat: '🐱', bunny: '🐰', dragon: '🐲', unicorn: '🦄' };
+      alert(`🎉 Your egg hatched! You got a ${randomPet}! ${petEmojis[randomPet]}`);
+    }, 100);
+  };
+  
+  const setActivePet = async (kidId, petId) => {
+    const ownedPets = kidPets[kidId] || [];
+    const selectedPet = ownedPets.find(p => p.id === petId);
+    
+    if (selectedPet) {
+      const updatedKids = kids.map(k => 
+        k.id === kidId ? { 
+          ...k, 
+          petType: selectedPet.type, 
+          petLevel: selectedPet.level,
+          activePet: petId 
+        } : k
+      );
+      await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
+    }
   };
   
   const buyItem = async (kidId, item, category) => {
@@ -304,7 +425,9 @@ export default function ChoreTrackerApp() {
         
         <div className="grid gap-4 md:grid-cols-3 mb-8">
           {kids.map(kid => {
-            const petType = PET_TYPES[kid.petType] || PET_TYPES.dog;
+            const ownedPets = kidPets[kid.id] || [];
+            const hasPet = ownedPets.length > 0 && kid.petType !== 'none';
+            const petType = hasPet ? PET_TYPES[kid.petType] : null;
             const kidInventory = kidInventories[kid.id] || { clothing: [], accessories: [], backgrounds: [], equipped: {} };
             const equippedClothing = kidInventory.equipped && kidInventory.equipped.clothing ? 
               SHOP_ITEMS.clothing.find(i => i.id === kidInventory.equipped.clothing) : null;
@@ -316,14 +439,36 @@ export default function ChoreTrackerApp() {
                 className="bg-white rounded-2xl p-6 shadow-lg hover:scale-105 transition-transform relative"
               >
                 <div className="relative">
-                  <div className="text-6xl mb-2 text-center animate-bounce">{petType.levels[kid.petLevel - 1]}</div>
-                  {equippedClothing && (
-                    <div className="text-2xl absolute top-0 left-1/2 transform -translate-x-1/2 animate-pulse">
-                      {equippedClothing.emoji}
-                    </div>
+                  {hasPet ? (
+                    <>
+                      {/* Show pet if owned */}
+                      {kid.petType === 'dog' && kid.petLevel === 3 ? (
+                        <div className="flex justify-center mb-2">
+                          <LottiePet 
+                            url="https://lottie.host/buvwpY646G/data.json"
+                            fallbackEmoji="🐕"
+                            size={96}
+                          />
+                        </div>
+                      ) : (
+                        <div className="text-6xl mb-2 text-center animate-bounce">{petType.levels[kid.petLevel - 1]}</div>
+                      )}
+                      {equippedClothing && (
+                        <div className="text-2xl absolute top-0 left-1/2 transform -translate-x-1/2 animate-pulse">
+                          {equippedClothing.emoji}
+                        </div>
+                      )}
+                      <div className="text-sm text-gray-500 text-center mb-2">{LEVEL_NAMES[kid.petLevel - 1]} {petType.name}</div>
+                    </>
+                  ) : (
+                    <>
+                      {/* No pet - show egg invitation */}
+                      <div className="text-6xl mb-2 text-center">🥚</div>
+                      <div className="text-sm text-gray-500 text-center mb-2">No pet yet!</div>
+                      <div className="text-xs text-blue-600 text-center">Buy an egg to hatch a pet!</div>
+                    </>
                   )}
                 </div>
-                <div className="text-sm text-gray-500 text-center mb-2">{LEVEL_NAMES[kid.petLevel - 1]} {petType.name}</div>
                 <h3 className="text-2xl font-bold text-center mb-2">{kid.name}</h3>
                 <div className="flex justify-center items-center gap-2 text-yellow-600">
                   <DollarSign size={20} />
@@ -461,6 +606,8 @@ export default function ChoreTrackerApp() {
               onOpenShop={() => setShowShop(true)}
               onOpenGames={() => setShowGames(true)}
               equipItem={(itemId, category) => equipItem(selectedKid, itemId, category)}
+              buyEgg={buyEgg}
+              setActivePet={setActivePet}
             />
           )}
           
@@ -485,10 +632,12 @@ export default function ChoreTrackerApp() {
     );
   };
   
-  const VirtualPetGame = ({ kid, petState, inventory, updatePetState, updateCoins, upgradePet, changePet, onOpenShop, onOpenGames, equipItem }) => {
+  const VirtualPetGame = ({ kid, petState, inventory, updatePetState, updateCoins, upgradePet, changePet, onOpenShop, onOpenGames, equipItem, buyEgg, setActivePet }) => {
     const [showPetSelector, setShowPetSelector] = useState(false);
     const [petAnimation, setPetAnimation] = useState('bounce');
-    const petType = PET_TYPES[kid.petType] || PET_TYPES.dog;
+    const ownedPets = kidPets[kid.id] || [];
+    const hasPet = ownedPets.length > 0 && kid.petType !== 'none';
+    const petType = hasPet ? (PET_TYPES[kid.petType] || PET_TYPES.dog) : null;
     const equippedBg = inventory.backgrounds && inventory.backgrounds.length > 0 && inventory.equipped && inventory.equipped.backgrounds ? 
       SHOP_ITEMS.backgrounds.find(bg => bg.id === inventory.equipped.backgrounds) : null;
     const bgClass = equippedBg ? equippedBg.gradient : 'from-sky-200 to-green-200';
@@ -604,12 +753,24 @@ export default function ChoreTrackerApp() {
         
         <div className={`bg-gradient-to-b ${bgClass} rounded-xl p-6 mb-4 min-h-64 relative overflow-hidden`}>
           <div className="text-center relative">
-            <button
-              onClick={() => setShowPetSelector(!showPetSelector)}
-              className={`text-8xl mb-2 hover:scale-110 transition-transform cursor-pointer inline-block ${getAnimationClass(petAnimation)}`}
-            >
-              {petType.levels[kid.petLevel - 1]}
-            </button>
+            {/* Render pet - use Lottie for dog level 3, emoji for others */}
+            {kid.petType === 'dog' && kid.petLevel === 3 ? (
+              <div className="inline-block">
+                <LottiePet 
+                  url="https://lottie.host/buvwpY646G/data.json"
+                  fallbackEmoji="🐕"
+                  size={128}
+                  className="text-8xl"
+                />
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowPetSelector(!showPetSelector)}
+                className={`text-8xl mb-2 hover:scale-110 transition-transform cursor-pointer inline-block ${getAnimationClass(petAnimation)}`}
+              >
+                {petType.levels[kid.petLevel - 1]}
+              </button>
+            )}
             
             {equippedClothing && (
               <div className="text-4xl absolute top-4 left-1/2 transform -translate-x-1/2 animate-pulse pointer-events-none">
@@ -622,14 +783,16 @@ export default function ChoreTrackerApp() {
               </div>
             )}
             
-            <div className="text-xl font-bold">{LEVEL_NAMES[kid.petLevel - 1]} {petType.name}</div>
-            <div className="text-sm text-gray-600">Level {kid.petLevel}/5</div>
-            <button
-              onClick={() => setShowPetSelector(!showPetSelector)}
-              className="text-sm text-blue-600 hover:underline"
-            >
-              Change Pet
-            </button>
+            
+            {/* Change pet button */}
+            {!(kid.petType === 'dog' && kid.petLevel === 3) && (
+              <button
+                onClick={() => setShowPetSelector(!showPetSelector)}
+                className="text-sm text-blue-600 hover:underline mt-2"
+              >
+                Change Pet
+              </button>
+            )}
           </div>
           
           {showPetSelector && (
@@ -1178,12 +1341,36 @@ export default function ChoreTrackerApp() {
           
           <div className="grid md:grid-cols-3 gap-4 mb-6">
             {kids.map(kid => {
-              const petType = PET_TYPES[kid.petType] || PET_TYPES.dog;
+              const ownedPets = kidPets[kid.id] || [];
+              const hasPet = ownedPets.length > 0 && kid.petType !== 'none';
+              const petType = hasPet ? (PET_TYPES[kid.petType] || PET_TYPES.dog) : null;
+              
               return (
                 <div key={kid.id} className="bg-white rounded-xl p-4 shadow">
-                  <div className="text-4xl text-center mb-2">{petType.levels[kid.petLevel - 1]}</div>
+                  {hasPet ? (
+                    <>
+                      {/* Show pet if owned */}
+                      {kid.petType === 'dog' && kid.petLevel === 3 ? (
+                        <div className="flex justify-center mb-2">
+                          <LottiePet 
+                            url="https://lottie.host/buvwpY646G/data.json"
+                            fallbackEmoji="🐕"
+                            size={64}
+                          />
+                        </div>
+                      ) : (
+                        <div className="text-4xl text-center mb-2">{petType.levels[kid.petLevel - 1]}</div>
+                      )}
+                      <div className="text-sm text-gray-500 mb-1 text-center">{LEVEL_NAMES[kid.petLevel - 1]} {petType.name}</div>
+                      <div className="text-xs text-blue-600 text-center mb-2">{ownedPets.length} pet(s) owned</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-4xl text-center mb-2">🥚</div>
+                      <div className="text-sm text-gray-500 text-center mb-2">No pet yet</div>
+                    </>
+                  )}
                   <h3 className="text-xl font-bold mb-2">{kid.name}</h3>
-                  <div className="text-sm text-gray-500 mb-1">{LEVEL_NAMES[kid.petLevel - 1]} {petType.name}</div>
                   <div className="text-2xl text-yellow-600 font-bold mb-1">${kid.coins}</div>
                   <div className="text-sm text-gray-600">
                     Completed: {(dailyProgress[kid.id] || []).length}/{chores.length}
