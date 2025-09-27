@@ -426,8 +426,8 @@ export default function ChoreTrackerApp() {
         <div className="grid gap-4 md:grid-cols-3 mb-8">
           {kids.map(kid => {
             const ownedPets = kidPets[kid.id] || [];
-            const hasPet = ownedPets.length > 0 && kid.petType !== 'none';
-            const petType = hasPet ? PET_TYPES[kid.petType] : null;
+            const hasPet = ownedPets.length > 0 && kid.petType && kid.petType !== 'none';
+            const petType = (hasPet && kid.petType) ? (PET_TYPES[kid.petType] || PET_TYPES.dog) : null;
             const kidInventory = kidInventories[kid.id] || { clothing: [], accessories: [], backgrounds: [], equipped: {} };
             const equippedClothing = kidInventory.equipped && kidInventory.equipped.clothing ? 
               SHOP_ITEMS.clothing.find(i => i.id === kidInventory.equipped.clothing) : null;
@@ -451,14 +451,18 @@ export default function ChoreTrackerApp() {
                           />
                         </div>
                       ) : (
-                        <div className="text-6xl mb-2 text-center animate-bounce">{petType.levels[kid.petLevel - 1]}</div>
+                        <div className="text-6xl mb-2 text-center animate-bounce">
+                          {petType && petType.levels ? petType.levels[kid.petLevel - 1] : '🥚'}
+                        </div>
                       )}
                       {equippedClothing && (
                         <div className="text-2xl absolute top-0 left-1/2 transform -translate-x-1/2 animate-pulse">
                           {equippedClothing.emoji}
                         </div>
                       )}
-                      <div className="text-sm text-gray-500 text-center mb-2">{LEVEL_NAMES[kid.petLevel - 1]} {petType.name}</div>
+                      <div className="text-sm text-gray-500 text-center mb-2">
+                        {petType ? `${LEVEL_NAMES[kid.petLevel - 1]} ${petType.name}` : 'No pet'}
+                      </div>
                     </>
                   ) : (
                     <>
@@ -637,7 +641,7 @@ export default function ChoreTrackerApp() {
     const [petAnimation, setPetAnimation] = useState('bounce');
     const ownedPets = kidPets[kid.id] || [];
     const hasPet = ownedPets.length > 0 && kid.petType !== 'none';
-    const petType = hasPet ? (PET_TYPES[kid.petType] || PET_TYPES.dog) : null;
+    const petType = (hasPet && kid.petType) ? (PET_TYPES[kid.petType] || PET_TYPES.dog) : null;
     const equippedBg = inventory.backgrounds && inventory.backgrounds.length > 0 && inventory.equipped && inventory.equipped.backgrounds ? 
       SHOP_ITEMS.backgrounds.find(bg => bg.id === inventory.equipped.backgrounds) : null;
     const bgClass = equippedBg ? equippedBg.gradient : 'from-sky-200 to-green-200';
@@ -679,6 +683,11 @@ export default function ChoreTrackerApp() {
         setTimeout(() => setPetAnimation('bounce'), 1000);
       }
     };
+    
+    const equippedClothing = inventory.equipped && inventory.equipped.clothing ? 
+      SHOP_ITEMS.clothing.find(i => i.id === inventory.equipped.clothing) : null;
+    const equippedAccessory = inventory.equipped && inventory.equipped.accessories ? 
+      SHOP_ITEMS.accessories.find(i => i.id === inventory.equipped.accessories) : null;
     
     const equippedClothing = inventory.equipped && inventory.equipped.clothing ? 
       SHOP_ITEMS.clothing.find(i => i.id === inventory.equipped.clothing) : null;
@@ -1342,8 +1351,8 @@ export default function ChoreTrackerApp() {
           <div className="grid md:grid-cols-3 gap-4 mb-6">
             {kids.map(kid => {
               const ownedPets = kidPets[kid.id] || [];
-              const hasPet = ownedPets.length > 0 && kid.petType !== 'none';
-              const petType = hasPet ? (PET_TYPES[kid.petType] || PET_TYPES.dog) : null;
+              const hasPet = ownedPets.length > 0 && kid.petType && kid.petType !== 'none';
+              const petType = (hasPet && kid.petType) ? (PET_TYPES[kid.petType] || PET_TYPES.dog) : null;
               
               return (
                 <div key={kid.id} className="bg-white rounded-xl p-4 shadow">
@@ -1359,9 +1368,13 @@ export default function ChoreTrackerApp() {
                           />
                         </div>
                       ) : (
-                        <div className="text-4xl text-center mb-2">{petType.levels[kid.petLevel - 1]}</div>
+                        <div className="text-4xl text-center mb-2">
+                          {petType && petType.levels ? petType.levels[kid.petLevel - 1] : '🥚'}
+                        </div>
                       )}
-                      <div className="text-sm text-gray-500 mb-1 text-center">{LEVEL_NAMES[kid.petLevel - 1]} {petType.name}</div>
+                      <div className="text-sm text-gray-500 mb-1 text-center">
+                        {petType ? `${LEVEL_NAMES[kid.petLevel - 1]} ${petType.name}` : 'No pet'}
+                      </div>
                       <div className="text-xs text-blue-600 text-center mb-2">{ownedPets.length} pet(s) owned</div>
                     </>
                   ) : (
