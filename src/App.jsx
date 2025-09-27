@@ -182,17 +182,19 @@ export default function ChoreTrackerApp() {
       await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
     }
     
-    await updateDoc(doc(db, 'app', 'dailyProgress'), {
+    await setDoc(doc(db, 'app', 'dailyProgress'), {
       data: { ...dailyProgress, [kidId]: newChores }
-    });
+    }, { merge: true });
   };
   
   const updatePetState = async (kidId, updates) => {
     const newPetStates = {
       ...petStates,
-      [kidId]: { ...petStates[kidId], ...updates }
+      [kidId]: { ...(petStates[kidId] || { food: 50, happy: 50 }), ...updates }
     };
-    await updateDoc(doc(db, 'app', 'petStates'), { data: newPetStates });
+    await setDoc(doc(db, 'app', 'petStates'), { 
+      data: newPetStates 
+    }, { merge: true });
   };
   
   const updateKidCoins = async (kidId, coinsToSubtract) => {
@@ -256,11 +258,12 @@ export default function ChoreTrackerApp() {
         k.id === kidId ? { ...k, coins: k.coins - item.price } : k
       );
       
-      // Update both in Firebase
-      await updateDoc(doc(db, 'app', 'inventories'), {
+      // Update inventory in Firebase (use setDoc with merge to create if doesn't exist)
+      await setDoc(doc(db, 'app', 'inventories'), {
         data: { ...kidInventories, [kidId]: newInventory }
-      });
+      }, { merge: true });
       
+      // Update coins in Firebase
       await updateDoc(doc(db, 'app', 'kids'), { 
         data: updatedKids 
       });
@@ -274,14 +277,14 @@ export default function ChoreTrackerApp() {
   
   const equipItem = async (kidId, itemId, category) => {
     const inventory = kidInventories[kidId] || { clothing: [], accessories: [], backgrounds: [], equipped: {} };
-    const newEquipped = { ...inventory.equipped, [category]: itemId };
+    const newEquipped = { ...(inventory.equipped || {}), [category]: itemId };
     
-    await updateDoc(doc(db, 'app', 'inventories'), {
+    await setDoc(doc(db, 'app', 'inventories'), {
       data: {
         ...kidInventories,
         [kidId]: { ...inventory, equipped: newEquipped }
       }
-    });
+    }, { merge: true });
   };
   
   if (loading) {
@@ -1043,9 +1046,9 @@ export default function ChoreTrackerApp() {
     
     const resetDaily = async () => {
       if (window.confirm('Reset all daily progress? This will keep coins and streaks.')) {
-        await updateDoc(doc(db, 'app', 'dailyProgress'), {
+        await setDoc(doc(db, 'app', 'dailyProgress'), {
           data: { 1: [], 2: [], 3: [] }
-        });
+        }, { merge: true });
       }
     };
     
@@ -1053,9 +1056,9 @@ export default function ChoreTrackerApp() {
       if (window.confirm('Process weekly payout? This will reset coins to 0.')) {
         const resetKids = kids.map(k => ({ ...k, coins: 0 }));
         await updateDoc(doc(db, 'app', 'kids'), { data: resetKids });
-        await updateDoc(doc(db, 'app', 'dailyProgress'), {
+        await setDoc(doc(db, 'app', 'dailyProgress'), {
           data: { 1: [], 2: [], 3: [] }
-        });
+        }, { merge: true });
       }
     };
     
