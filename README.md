@@ -42,11 +42,10 @@ The app will open at [http://localhost:3000](http://localhost:3000). When you la
 If you want to deploy on Firebase Hosting:
 
 ```bash
-npm run build
-firebase deploy
+npm run deploy
 ```
 
-Make sure you have the Firebase CLI installed (`npm install -g firebase-tools`) and are logged into your Firebase project.
+This script runs `npm run build` followed by `firebase deploy`. Make sure you have the Firebase CLI installed (`npm install -g firebase-tools`) or available via `npx firebase-tools`, and that you are logged into your Firebase project before running the command.
 
 ## Troubleshooting
 
