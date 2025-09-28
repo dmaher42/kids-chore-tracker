@@ -1,21 +1,27 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
+import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
-// Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyA5a7dy9EvEHl-iZo_4wbR7nSCCq-3BIfw",
-  authDomain: "kids-chore-tracker-762f8.firebaseapp.com",
-  projectId: "kids-chore-tracker-762f8",
-  storageBucket: "kids-chore-tracker-762f8.firebasestorage.app",
-  messagingSenderId: "528451631659",
-  appId: "1:528451631659:web:bfc2fb02ffde557decc86e"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase
+const missingConfigKeys = Object.entries(firebaseConfig)
+  .filter(([, value]) => !value)
+  .map(([key]) => key);
+
+if (missingConfigKeys.length) {
+  throw new Error(
+    `Missing Firebase configuration. Set the following environment variables: ${missingConfigKeys.join(', ')}`
+  );
+}
+
 const app = initializeApp(firebaseConfig);
 
-// Export Firestore and Auth
 export const db = getFirestore(app);
 export const auth = getAuth(app);
