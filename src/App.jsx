@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Users, Home, Settings, Plus, Trash2, DollarSign, Star, Award, ShoppingBag, Sparkles, Gamepad2, Zap, Trophy } from 'lucide-react';
+import { Plus, Trash2, DollarSign, Star, Award, ShoppingBag, Sparkles, Gamepad2, Zap } from 'lucide-react';
 import Lottie from 'lottie-react';
 
 // Firebase imports
 import { db } from './firebase';
-import { collection, doc, setDoc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 
 // Pet evolution stages (5 levels!)
 const PET_TYPES = {
@@ -99,7 +99,6 @@ const LottiePet = ({ url, fallbackEmoji, size = 128, className = '' }) => {
 
 // Main App Component
 export default function ChoreTrackerApp() {
-  const [isParent, setIsParent] = useState(false);
   const [parentPassword, setParentPassword] = useState('');
   const [currentView, setCurrentView] = useState('select');
   const [selectedKid, setSelectedKid] = useState(null);
@@ -200,7 +199,6 @@ export default function ChoreTrackerApp() {
   
   const handleParentLogin = () => {
     if (parentPassword === 'parent123') {
-      setIsParent(true);
       setCurrentView('parent');
     } else {
       alert('Incorrect password!');
@@ -275,7 +273,6 @@ export default function ChoreTrackerApp() {
   
   const changePetType = async (kidId, petType) => {
     // Now this sets the active pet from owned pets
-    const kid = kids.find(k => k.id === kidId);
     const ownedPets = kidPets[kidId] || [];
     const selectedPet = ownedPets.find(p => p.type === petType);
     
@@ -918,7 +915,6 @@ export default function ChoreTrackerApp() {
   
   const MiniGames = ({ kid, onEarnCoins, onClose }) => {
     const [currentGame, setCurrentGame] = useState(null);
-    const [gameState, setGameState] = useState({});
     
     // Quick Click Game
     const [clickCount, setClickCount] = useState(0);
@@ -937,7 +933,7 @@ export default function ChoreTrackerApp() {
           alert(`Great job! You earned ${coinsEarned} coins!`);
         }
       }
-    }, [clickTimeLeft, clickGameActive, clickCount]);
+    }, [clickTimeLeft, clickGameActive, clickCount, onEarnCoins]);
     
     const startClickGame = () => {
       setClickCount(0);
@@ -1416,7 +1412,7 @@ export default function ChoreTrackerApp() {
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-3xl font-bold">Parent Dashboard</h1>
             <button
-              onClick={() => { setIsParent(false); setCurrentView('select'); }}
+              onClick={() => setCurrentView('select')}
               className="bg-gray-500 text-white px-4 py-2 rounded-lg"
             >
               Exit
