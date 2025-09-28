@@ -45,7 +45,7 @@ If you want to deploy on Firebase Hosting:
 npm run deploy
 ```
 
-This wraps `firebase deploy`. The Firebase config automatically runs `npm run build` before every deploy, so the latest production build is always published. Make sure you have the Firebase CLI installed (`npm install -g firebase-tools`) or available via `npx firebase-tools`, and that you are logged into your Firebase project before running the command. If you prefer to call the CLI directly, `firebase deploy` will run the same predeploy build hook.
+This wraps `firebase deploy`. The Firebase Hosting config automatically runs `npm run build` before every deploy, so the latest production build is always published. Make sure you have the Firebase CLI installed (`npm install -g firebase-tools`) or available via `npx firebase-tools`, and that you are logged into your Firebase project before running the command. Calling `firebase deploy` directly will trigger the same predeploy build hook if you prefer not to use the npm script.
 
 ## Troubleshooting
 
