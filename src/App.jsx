@@ -60,6 +60,9 @@ const SHOP_ITEMS = {
 
 const LEVEL_NAMES = ['Egg', 'Baby', 'Teen', 'Adult', 'Legendary'];
 
+const DEFAULT_PET_STATE = { food: 50, happy: 50 };
+const EMPTY_INVENTORY = { clothing: [], accessories: [], backgrounds: [], equipped: {} };
+
 // Lottie Pet Component for animated pets
 const LottiePet = ({ url, fallbackEmoji, size = 128, className = '' }) => {
   const [animationData, setAnimationData] = useState(null);
@@ -271,19 +274,6 @@ export default function ChoreTrackerApp() {
     }
   };
   
-  const changePetType = async (kidId, petType) => {
-    // Now this sets the active pet from owned pets
-    const ownedPets = kidPets[kidId] || [];
-    const selectedPet = ownedPets.find(p => p.type === petType);
-    
-    if (selectedPet) {
-      const updatedKids = kids.map(k => 
-        k.id === kidId ? { ...k, petType: selectedPet.type, petLevel: selectedPet.level, activePet: selectedPet.id } : k
-      );
-      await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
-    }
-  };
-  
   const buyEgg = async (kidId) => {
     const kid = kids.find(k => k.id === kidId);
     const eggCost = 15;
@@ -423,9 +413,12 @@ export default function ChoreTrackerApp() {
         <div className="grid gap-4 md:grid-cols-3 mb-8">
           {kids.map(kid => {
             const ownedPets = kidPets[kid.id] || [];
-            const hasPet = ownedPets.length > 0 && kid.petType && kid.petType !== 'none';
-            const petType = (hasPet && kid.petType) ? (PET_TYPES[kid.petType] || PET_TYPES.dog) : null;
-            const kidInventory = kidInventories[kid.id] || { clothing: [], accessories: [], backgrounds: [], equipped: {} };
+            const activePet = ownedPets.find(pet => pet.id === kid.activePet) || null;
+            const petTypeKey = activePet?.type || (kid.petType && kid.petType !== 'none' ? kid.petType : null);
+            const petType = petTypeKey ? (PET_TYPES[petTypeKey] || null) : null;
+            const petLevel = activePet?.level || kid.petLevel || 1;
+            const hasPet = Boolean(petType);
+            const kidInventory = kidInventories[kid.id] || EMPTY_INVENTORY;
             const equippedClothing = kidInventory.equipped && kidInventory.equipped.clothing ? 
               SHOP_ITEMS.clothing.find(i => i.id === kidInventory.equipped.clothing) : null;
             
@@ -439,7 +432,7 @@ export default function ChoreTrackerApp() {
                   {hasPet ? (
                     <>
                       {/* Show pet if owned */}
-                      {kid.petType === 'dog' && kid.petLevel === 3 ? (
+                      {petTypeKey === 'dog' && petLevel === 3 ? (
                         <div className="flex justify-center mb-2">
                           <LottiePet 
                             url="https://lottie.host/buvwpY646G/data.json"
@@ -449,7 +442,7 @@ export default function ChoreTrackerApp() {
                         </div>
                       ) : (
                         <div className="text-6xl mb-2 text-center animate-bounce">
-                          {petType && petType.levels ? petType.levels[kid.petLevel - 1] : '🥚'}
+                          {petType && petType.levels ? petType.levels[Math.min(petType.levels.length - 1, Math.max(0, petLevel - 1))] : '🥚'}
                         </div>
                       )}
                       {equippedClothing && (
@@ -458,8 +451,9 @@ export default function ChoreTrackerApp() {
                         </div>
                       )}
                       <div className="text-sm text-gray-500 text-center mb-2">
-                        {petType ? `${LEVEL_NAMES[kid.petLevel - 1]} ${petType.name}` : 'No pet'}
+                        {petType ? `${LEVEL_NAMES[Math.max(0, Math.min(LEVEL_NAMES.length - 1, petLevel - 1))]} ${petType.name}` : 'No pet'}
                       </div>
+                      <div className="text-xs text-blue-600 text-center mb-2">{ownedPets.length} pet(s) owned</div>
                     </>
                   ) : (
                     <>
@@ -531,7 +525,10 @@ export default function ChoreTrackerApp() {
     const kid = kids.find(k => k.id === selectedKid);
     const completedChores = dailyProgress[selectedKid] || [];
     const allDone = completedChores.length === chores.length;
-    
+    const kidPetState = petStates[selectedKid] || DEFAULT_PET_STATE;
+    const kidInventory = kidInventories[selectedKid] || EMPTY_INVENTORY;
+    const kidOwnedPets = kidPets[selectedKid] || [];
+
     if (!kid) return null;
     
     return (
@@ -596,26 +593,26 @@ export default function ChoreTrackerApp() {
           </div>
           
           {allDone && !showShop && !showGames && (
-            <VirtualPetGame 
-              kid={kid} 
-              petState={petStates[selectedKid] || { food: 50, happy: 50 }}
-              inventory={kidInventories[selectedKid] || { clothing: [], accessories: [], backgrounds: [], equipped: {} }}
-              updatePetState={(updates) => updatePetState(selectedKid, updates)}
-              updateCoins={(amount) => updateKidCoins(selectedKid, amount)}
-              upgradePet={() => upgradePetLevel(selectedKid)}
-              changePet={(type) => changePetType(selectedKid, type)}
+            <VirtualPetGame
+              kid={kid}
+              petState={kidPetState}
+              inventory={kidInventory}
+              ownedPets={kidOwnedPets}
+              onUpdatePetState={(updates) => updatePetState(selectedKid, updates)}
+              onSpendCoins={(amount) => updateKidCoins(selectedKid, amount)}
+              onUpgradePet={() => upgradePetLevel(selectedKid)}
               onOpenShop={() => setShowShop(true)}
               onOpenGames={() => setShowGames(true)}
-              equipItem={(itemId, category) => equipItem(selectedKid, itemId, category)}
-              buyEgg={buyEgg}
-              setActivePet={setActivePet}
+              onEquipItem={(itemId, category) => equipItem(selectedKid, itemId, category)}
+              onBuyEgg={() => buyEgg(selectedKid)}
+              onChangeActivePet={(petId) => setActivePet(selectedKid, petId)}
             />
           )}
-          
+
           {allDone && showShop && (
             <PetShop
               kid={kid}
-              inventory={kidInventories[selectedKid] || { clothing: [], accessories: [], backgrounds: [], equipped: {} }}
+              inventory={kidInventory}
               onBuy={(item, category) => buyItem(selectedKid, item, category)}
               onClose={() => setShowShop(false)}
             />
@@ -633,18 +630,37 @@ export default function ChoreTrackerApp() {
     );
   };
   
-  const VirtualPetGame = ({ kid, petState, inventory, updatePetState, updateCoins, upgradePet, changePet, onOpenShop, onOpenGames, equipItem, buyEgg, setActivePet }) => {
+  const VirtualPetGame = ({
+    kid,
+    petState,
+    inventory,
+    ownedPets,
+    onUpdatePetState,
+    onSpendCoins,
+    onUpgradePet,
+    onOpenShop,
+    onOpenGames,
+    onEquipItem,
+    onBuyEgg,
+    onChangeActivePet
+  }) => {
     const [showPetSelector, setShowPetSelector] = useState(false);
     const [petAnimation, setPetAnimation] = useState('bounce');
-    const ownedPets = kidPets[kid.id] || [];
-    const hasPet = ownedPets.length > 0 && kid.petType !== 'none';
-    const petType = (hasPet && kid.petType) ? (PET_TYPES[kid.petType] || PET_TYPES.dog) : null;
-    const equippedBg = inventory.backgrounds && inventory.backgrounds.length > 0 && inventory.equipped && inventory.equipped.backgrounds ? 
-      SHOP_ITEMS.backgrounds.find(bg => bg.id === inventory.equipped.backgrounds) : null;
+
+    const safePetState = { ...DEFAULT_PET_STATE, ...petState };
+    const equipped = inventory?.equipped || {};
+    const activePet = ownedPets.find(pet => pet.id === kid.activePet) || null;
+    const fallbackPet = activePet || ownedPets[0] || null;
+    const petTypeKey = fallbackPet?.type || (kid.petType !== 'none' ? kid.petType : null);
+    const petMeta = petTypeKey ? PET_TYPES[petTypeKey] : null;
+    const petLevel = fallbackPet?.level || kid.petLevel || 1;
+    const hasPet = Boolean(petMeta && ownedPets.length > 0);
+    const equippedBg = equipped.backgrounds
+      ? SHOP_ITEMS.backgrounds.find(bg => bg.id === equipped.backgrounds)
+      : null;
     const bgClass = equippedBg ? equippedBg.gradient : 'from-sky-200 to-green-200';
-    const upgradeCost = kid.petLevel * 10;
-    
-    // Cycle through animations
+    const upgradeCost = petLevel * 10;
+
     useEffect(() => {
       const animations = ['bounce', 'pulse', 'wiggle', 'float'];
       let index = 0;
@@ -654,40 +670,9 @@ export default function ChoreTrackerApp() {
       }, 3000);
       return () => clearInterval(interval);
     }, []);
-    
-    const feedPet = () => {
-      if (kid.coins >= 3) {
-        updateCoins(3);
-        updatePetState({ food: Math.min(100, petState.food + 20) });
-        setPetAnimation('jump');
-        setTimeout(() => setPetAnimation('bounce'), 500);
-      }
-    };
-    
-    const playWithPet = () => {
-      if (kid.coins >= 2) {
-        updateCoins(2);
-        updatePetState({ happy: Math.min(100, petState.happy + 20) });
-        setPetAnimation('spin');
-        setTimeout(() => setPetAnimation('bounce'), 500);
-      }
-    };
-    
-    const handleUpgrade = () => {
-      if (kid.coins >= upgradeCost && kid.petLevel < 5) {
-        upgradePet();
-        setPetAnimation('tada');
-        setTimeout(() => setPetAnimation('bounce'), 1000);
-      }
-    };
-    
-    const equippedClothing = inventory.equipped && inventory.equipped.clothing ?
-      SHOP_ITEMS.clothing.find(i => i.id === inventory.equipped.clothing) : null;
-    const equippedAccessory = inventory.equipped && inventory.equipped.accessories ?
-      SHOP_ITEMS.accessories.find(i => i.id === inventory.equipped.accessories) : null;
-    
+
     const getAnimationClass = (anim) => {
-      switch(anim) {
+      switch (anim) {
         case 'bounce': return 'animate-bounce';
         case 'pulse': return 'animate-pulse';
         case 'wiggle': return 'animate-wiggle';
@@ -698,7 +683,88 @@ export default function ChoreTrackerApp() {
         default: return 'animate-bounce';
       }
     };
-    
+
+    const spendCoins = (amount) => {
+      if (kid.coins < amount) return false;
+      onSpendCoins(amount);
+      return true;
+    };
+
+    const feedPet = () => {
+      if (spendCoins(3)) {
+        onUpdatePetState({ food: Math.min(100, safePetState.food + 20) });
+        setPetAnimation('jump');
+        setTimeout(() => setPetAnimation('bounce'), 500);
+      }
+    };
+
+    const playWithPet = () => {
+      if (spendCoins(2)) {
+        onUpdatePetState({ happy: Math.min(100, safePetState.happy + 20) });
+        setPetAnimation('spin');
+        setTimeout(() => setPetAnimation('bounce'), 500);
+      }
+    };
+
+    const handleUpgrade = () => {
+      if (kid.coins >= upgradeCost && petLevel < 5) {
+        onUpgradePet();
+        setPetAnimation('tada');
+        setTimeout(() => setPetAnimation('bounce'), 1000);
+      }
+    };
+
+    const handleBuyEgg = () => {
+      const eggCost = 15;
+      if (kid.coins < eggCost) {
+        alert(`Not enough coins! You need ${eggCost} coins to buy an egg.`);
+        return;
+      }
+      onBuyEgg();
+      setPetAnimation('tada');
+      setTimeout(() => setPetAnimation('bounce'), 1000);
+    };
+
+    const handlePetSelect = (petId) => {
+      onChangeActivePet(petId);
+      setPetAnimation('tada');
+      setTimeout(() => setPetAnimation('bounce'), 1000);
+      setShowPetSelector(false);
+    };
+
+    const equippedClothing = equipped.clothing
+      ? SHOP_ITEMS.clothing.find(i => i.id === equipped.clothing)
+      : null;
+    const equippedAccessory = equipped.accessories
+      ? SHOP_ITEMS.accessories.find(i => i.id === equipped.accessories)
+      : null;
+
+    const inventorySections = [
+      {
+        key: 'clothing',
+        title: 'Your Wardrobe',
+        items: SHOP_ITEMS.clothing,
+        activeClass: 'border-blue-500 bg-blue-50 animate-pulse',
+        renderItem: (item) => <div className="text-2xl">{item.emoji}</div>
+      },
+      {
+        key: 'accessories',
+        title: 'Your Accessories',
+        items: SHOP_ITEMS.accessories,
+        activeClass: 'border-green-500 bg-green-50 animate-pulse',
+        renderItem: (item) => <div className="text-2xl">{item.emoji}</div>
+      },
+      {
+        key: 'backgrounds',
+        title: 'Backgrounds',
+        items: SHOP_ITEMS.backgrounds,
+        activeClass: 'border-purple-500 bg-purple-50 animate-pulse',
+        renderItem: (item) => (
+          <div className={`h-16 w-24 rounded-lg bg-gradient-to-br ${item.gradient}`}></div>
+        )
+      }
+    ];
+
     return (
       <div className="bg-white rounded-2xl p-6 shadow-xl">
         <style>{`
@@ -731,7 +797,7 @@ export default function ChoreTrackerApp() {
           .animate-spin-once { animation: spin-once 0.5s ease-out; }
           .animate-tada { animation: tada 1s ease-out; }
         `}</style>
-        
+
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-2xl font-bold">🏠 Your Virtual Pet</h3>
           <div className="flex gap-2">
@@ -751,28 +817,34 @@ export default function ChoreTrackerApp() {
             </button>
           </div>
         </div>
-        
+
         <div className={`bg-gradient-to-b ${bgClass} rounded-xl p-6 mb-4 min-h-64 relative overflow-hidden`}>
           <div className="text-center relative">
-            {/* Render pet - use Lottie for dog level 3, emoji for others */}
-            {kid.petType === 'dog' && kid.petLevel === 3 ? (
-              <div className="inline-block">
-                <LottiePet 
-                  url="https://lottie.host/buvwpY646G/data.json"
-                  fallbackEmoji="🐕"
-                  size={128}
-                  className="text-8xl"
-                />
-              </div>
+            {hasPet && petMeta ? (
+              petTypeKey === 'dog' && petLevel === 3 ? (
+                <div className="inline-block">
+                  <LottiePet
+                    url="https://lottie.host/buvwpY646G/data.json"
+                    fallbackEmoji="🐕"
+                    size={128}
+                    className="text-8xl"
+                  />
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowPetSelector(!showPetSelector)}
+                  className={`text-8xl mb-2 hover:scale-110 transition-transform cursor-pointer inline-block ${getAnimationClass(petAnimation)}`}
+                >
+                  {petMeta.levels[Math.min(petMeta.levels.length - 1, Math.max(0, petLevel - 1))]}
+                </button>
+              )
             ) : (
-              <button
-                onClick={() => setShowPetSelector(!showPetSelector)}
-                className={`text-8xl mb-2 hover:scale-110 transition-transform cursor-pointer inline-block ${getAnimationClass(petAnimation)}`}
-              >
-                {petType.levels[kid.petLevel - 1]}
-              </button>
+              <div className="text-center">
+                <div className={`text-8xl mb-2 ${getAnimationClass(petAnimation)}`}>🥚</div>
+                <p className="text-sm text-white">Buy an egg to hatch your first pet!</p>
+              </div>
             )}
-            
+
             {equippedClothing && (
               <div className="text-4xl absolute top-4 left-1/2 transform -translate-x-1/2 animate-pulse pointer-events-none">
                 {equippedClothing.emoji}
@@ -783,10 +855,8 @@ export default function ChoreTrackerApp() {
                 {equippedAccessory.emoji}
               </div>
             )}
-            
-            
-            {/* Change pet button */}
-            {!(kid.petType === 'dog' && kid.petLevel === 3) && (
+
+            {hasPet && (
               <button
                 onClick={() => setShowPetSelector(!showPetSelector)}
                 className="text-sm text-blue-600 hover:underline mt-2"
@@ -795,54 +865,77 @@ export default function ChoreTrackerApp() {
               </button>
             )}
           </div>
-          
+
           {showPetSelector && (
             <div className="absolute top-full left-4 right-4 mt-2 bg-white rounded-xl p-4 shadow-xl z-10">
-              <h4 className="font-bold mb-3">Choose Your Pet:</h4>
-              <div className="grid grid-cols-5 gap-2">
-                {Object.entries(PET_TYPES).map(([key, pet]) => (
-                  <button
-                    key={key}
-                    onClick={() => {
-                      changePet(key);
-                      setShowPetSelector(false);
-                      setPetAnimation('tada');
-                    }}
-                    className={`p-3 rounded-lg border-2 hover:border-blue-400 transition ${
-                      kid.petType === key ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
-                    }`}
-                  >
-                    <div className="text-3xl">{pet.emoji}</div>
-                    <div className="text-xs mt-1">{pet.name}</div>
-                  </button>
-                ))}
-              </div>
+              <h4 className="font-bold mb-3">Choose Your Pet</h4>
+              {ownedPets.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {ownedPets.map(pet => {
+                    const metadata = PET_TYPES[pet.type];
+                    const isActive = kid.activePet === pet.id;
+                    return (
+                      <button
+                        key={pet.id}
+                        onClick={() => handlePetSelect(pet.id)}
+                        className={`p-3 rounded-lg border-2 transition ${
+                          isActive ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-400'
+                        }`}
+                      >
+                        <div className="text-3xl">
+                          {metadata ? metadata.levels[Math.min(metadata.levels.length - 1, Math.max(0, pet.level - 1))] : '🐾'}
+                        </div>
+                        <div className="text-xs font-semibold mt-1">{metadata ? metadata.name : pet.type}</div>
+                        <div className="text-[10px] text-gray-500">Level {pet.level}</div>
+                        {isActive && <div className="text-xs text-blue-500 font-semibold mt-1">Active</div>}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-600">No pets yet. Buy an egg to get started!</p>
+              )}
+
+              <button
+                onClick={handleBuyEgg}
+                className="mt-3 w-full bg-yellow-400 hover:bg-yellow-500 text-white py-2 rounded-lg font-semibold flex items-center justify-center gap-2"
+              >
+                <span role="img" aria-hidden="true">🥚</span>
+                Buy Mystery Egg (15 coins)
+              </button>
             </div>
           )}
-          
+
           <div className="absolute bottom-4 left-4 right-4">
             <div className="mb-2">
               <div className="flex justify-between text-sm mb-1">
-                <span>Food: {petState.food}%</span>
-                <span>Happiness: {petState.happy}%</span>
+                <span>Food: {safePetState.food}%</span>
+                <span>Happiness: {safePetState.happy}%</span>
               </div>
               <div className="bg-gray-200 rounded-full h-2">
-                <div className="bg-orange-500 h-2 rounded-full transition-all duration-500" style={{ width: `${petState.food}%` }}></div>
+                <div
+                  className="bg-orange-500 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${safePetState.food}%` }}
+                ></div>
               </div>
               <div className="bg-gray-200 rounded-full h-2 mt-1">
-                <div className="bg-pink-500 h-2 rounded-full transition-all duration-500" style={{ width: `${petState.happy}%` }}></div>
+                <div
+                  className="bg-pink-500 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${safePetState.happy}%` }}
+                ></div>
               </div>
             </div>
           </div>
         </div>
-        
+
         <div className="grid grid-cols-3 gap-3">
           <button
             onClick={feedPet}
             disabled={kid.coins < 3}
             className="bg-orange-500 text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-orange-600 hover:scale-105 transition-all"
           >
-            🍖 Feed<br/>
+            🍖 Feed
+            <br />
             <span className="text-sm">(3 coins)</span>
           </button>
           <button
@@ -850,65 +943,56 @@ export default function ChoreTrackerApp() {
             disabled={kid.coins < 2}
             className="bg-pink-500 text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-pink-600 hover:scale-105 transition-all"
           >
-            ⚽ Play<br/>
+            ⚽ Play
+            <br />
             <span className="text-sm">(2 coins)</span>
           </button>
           <button
             onClick={handleUpgrade}
-            disabled={kid.coins < upgradeCost || kid.petLevel >= 5}
+            disabled={kid.coins < upgradeCost || petLevel >= 5}
             className="bg-purple-500 text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-purple-600 hover:scale-105 transition-all"
           >
-            {kid.petLevel === 5 ? '✨ MAX' : `⭐ Evolve (${upgradeCost})`}
+            {petLevel >= 5 ? '✨ MAX' : `⭐ Evolve (${upgradeCost})`}
           </button>
         </div>
-        
-        {inventory.clothing && inventory.clothing.length > 0 && (
-          <div className="mt-4">
-            <h4 className="font-bold mb-2">Your Wardrobe:</h4>
-            <div className="flex gap-2 flex-wrap">
-              {inventory.clothing.map(itemId => {
-                const item = SHOP_ITEMS.clothing.find(i => i.id === itemId);
-                if (!item) return null;
-                const isEquipped = inventory.equipped && inventory.equipped.clothing === itemId;
-                return (
-                  <button
-                    key={itemId}
-                    onClick={() => equipItem(itemId, 'clothing')}
-                    className={`p-2 rounded-lg border-2 transition-all hover:scale-110 ${
-                      isEquipped ? 'border-blue-500 bg-blue-50 animate-pulse' : 'border-gray-200'
-                    }`}
-                  >
-                    <div className="text-2xl">{item.emoji}</div>
-                  </button>
-                );
-              })}
+
+        <button
+          onClick={handleBuyEgg}
+          disabled={kid.coins < 15}
+          className="mt-4 w-full bg-yellow-400 hover:bg-yellow-500 text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold flex items-center justify-center gap-2"
+        >
+          <span role="img" aria-hidden="true">🥚</span>
+          {ownedPets.length ? 'Buy Another Egg (15 coins)' : 'Buy Your First Egg (15 coins)'}
+        </button>
+
+        {inventorySections.map(section => {
+          const owned = inventory[section.key] || [];
+          if (!owned.length) return null;
+          const equippedId = equipped[section.key];
+          return (
+            <div key={section.key} className="mt-4">
+              <h4 className="font-bold mb-2">{section.title}</h4>
+              <div className="flex gap-2 flex-wrap">
+                {owned.map(itemId => {
+                  const item = section.items.find(i => i.id === itemId);
+                  if (!item) return null;
+                  const isEquipped = equippedId === itemId;
+                  return (
+                    <button
+                      key={itemId}
+                      onClick={() => onEquipItem(itemId, section.key)}
+                      className={`p-2 rounded-lg border-2 transition-all hover:scale-110 ${
+                        isEquipped ? section.activeClass : 'border-gray-200'
+                      }`}
+                    >
+                      {section.renderItem(item)}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
-        
-        {inventory.accessories && inventory.accessories.length > 0 && (
-          <div className="mt-4">
-            <h4 className="font-bold mb-2">Your Accessories:</h4>
-            <div className="flex gap-2 flex-wrap">
-              {inventory.accessories.map(itemId => {
-                const item = SHOP_ITEMS.accessories.find(i => i.id === itemId);
-                if (!item) return null;
-                const isEquipped = inventory.equipped && inventory.equipped.accessories === itemId;
-                return (
-                  <button
-                    key={itemId}
-                    onClick={() => equipItem(itemId, 'accessories')}
-                    className={`p-2 rounded-lg border-2 transition-all hover:scale-110 ${
-                      isEquipped ? 'border-green-500 bg-green-50 animate-pulse' : 'border-gray-200'
-                    }`}
-                  >
-                    <div className="text-2xl">{item.emoji}</div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+          );
+        })}
       </div>
     );
   };
@@ -1434,17 +1518,20 @@ export default function ChoreTrackerApp() {
           <div className="grid md:grid-cols-3 gap-4 mb-6">
             {kids.map(kid => {
               const ownedPets = kidPets[kid.id] || [];
-              const hasPet = ownedPets.length > 0 && kid.petType && kid.petType !== 'none';
-              const petType = (hasPet && kid.petType) ? (PET_TYPES[kid.petType] || PET_TYPES.dog) : null;
-              
+              const activePet = ownedPets.find(pet => pet.id === kid.activePet) || null;
+              const petTypeKey = activePet?.type || (kid.petType && kid.petType !== 'none' ? kid.petType : null);
+              const petType = petTypeKey ? (PET_TYPES[petTypeKey] || null) : null;
+              const petLevel = activePet?.level || kid.petLevel || 1;
+              const hasPet = Boolean(petType);
+
               return (
                 <div key={kid.id} className="bg-white rounded-xl p-4 shadow">
                   {hasPet ? (
                     <>
                       {/* Show pet if owned */}
-                      {kid.petType === 'dog' && kid.petLevel === 3 ? (
+                      {petTypeKey === 'dog' && petLevel === 3 ? (
                         <div className="flex justify-center mb-2">
-                          <LottiePet 
+                          <LottiePet
                             url="https://lottie.host/buvwpY646G/data.json"
                             fallbackEmoji="🐕"
                             size={64}
@@ -1452,11 +1539,11 @@ export default function ChoreTrackerApp() {
                         </div>
                       ) : (
                         <div className="text-4xl text-center mb-2">
-                          {petType && petType.levels ? petType.levels[kid.petLevel - 1] : '🥚'}
+                          {petType && petType.levels ? petType.levels[Math.min(petType.levels.length - 1, Math.max(0, petLevel - 1))] : '🥚'}
                         </div>
                       )}
                       <div className="text-sm text-gray-500 mb-1 text-center">
-                        {petType ? `${LEVEL_NAMES[kid.petLevel - 1]} ${petType.name}` : 'No pet'}
+                        {petType ? `${LEVEL_NAMES[Math.max(0, Math.min(LEVEL_NAMES.length - 1, petLevel - 1))]} ${petType.name}` : 'No pet'}
                       </div>
                       <div className="text-xs text-blue-600 text-center mb-2">{ownedPets.length} pet(s) owned</div>
                     </>
