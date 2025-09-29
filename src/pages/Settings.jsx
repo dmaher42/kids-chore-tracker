@@ -3,6 +3,7 @@ import {
   Box,
   Divider,
   FormControl,
+  FormHelperText,
   InputLabel,
   List,
   ListItem,
@@ -19,6 +20,8 @@ export default function Settings() {
   const [reminders, setReminders] = useState(false);
   const [resetHour, setResetHour] = useState('07:00');
   const [rewardMode, setRewardMode] = useState('coins');
+  const [movementKeys, setMovementKeys] = useState('wasd');
+  const [lookKeys, setLookKeys] = useState('mouse');
 
   return (
     <Box>
@@ -98,6 +101,42 @@ export default function Settings() {
             <MenuItem value="coins-points">Coins + XP bonus</MenuItem>
             <MenuItem value="tickets">Tickets for raffle night</MenuItem>
           </Select>
+        </FormControl>
+
+        <Typography variant="h6" sx={{ mt: 4, mb: 1 }}>
+          Gameplay controls
+        </Typography>
+        <FormControl fullWidth sx={{ mb: 3 }}>
+          <InputLabel id="movement-keys-label">Movement keys</InputLabel>
+          <Select
+            labelId="movement-keys-label"
+            value={movementKeys}
+            label="Movement keys"
+            onChange={(event) => setMovementKeys(event.target.value)}
+          >
+            <MenuItem value="wasd">W, A, S, D</MenuItem>
+            <MenuItem value="arrows">Arrow keys</MenuItem>
+            <MenuItem value="touch">On-screen joystick</MenuItem>
+          </Select>
+          <FormHelperText>
+            Choose the layout for walking around mini games. WASD keeps forward on W and strafe on A/D.
+          </FormHelperText>
+        </FormControl>
+        <FormControl fullWidth>
+          <InputLabel id="look-keys-label">Look controls</InputLabel>
+          <Select
+            labelId="look-keys-label"
+            value={lookKeys}
+            label="Look controls"
+            onChange={(event) => setLookKeys(event.target.value)}
+          >
+            <MenuItem value="mouse">Mouse / trackpad</MenuItem>
+            <MenuItem value="arrows">Arrow keys</MenuItem>
+            <MenuItem value="touch">Touch drag</MenuItem>
+          </Select>
+          <FormHelperText>
+            The look controls adjust camera rotation in supported games. Set to mouse for free-look aiming.
+          </FormHelperText>
         </FormControl>
       </Box>
     </Box>
