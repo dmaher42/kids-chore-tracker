@@ -4,6 +4,8 @@
 /node_modules
 /.pnp
 .pnp.js
+# Firebase deployment cache artifacts
+.firebase/
 
 # testing
 /coverage
