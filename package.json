@@ -3,11 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/icons-material": "^6.4.1",
+    "@mui/material": "^6.4.1",
+    "@mui/x-data-grid": "^7.23.0",
+    "@mui/x-date-pickers": "^7.23.0",
+    "dayjs": "^1.11.13",
     "firebase": "^12.3.0",
     "lottie-react": "^2.4.1",
     "lucide-react": "^0.544.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-router-dom": "^6.28.0",
     "react-scripts": "5.0.1"
   },
   "scripts": {
