@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
+import { Outlet, Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   AppBar,
   Avatar,
@@ -9,7 +9,6 @@ import {
   Drawer,
   IconButton,
   List,
-  ListItemAvatar,
   ListItemButton,
   ListItemIcon,
   ListItemText,
@@ -17,7 +16,7 @@ import {
   Typography,
   useMediaQuery,
 } from '@mui/material';
-import { styled, useTheme } from '@mui/material/styles';
+import { useTheme } from '@mui/material/styles';
 import MenuIcon from '@mui/icons-material/Menu';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
@@ -30,33 +29,6 @@ import TopBarActions from './TopBarActions';
 import { useAppData } from '../context/AppDataContext';
 
 const DRAWER_WIDTH = 260;
-
-const Main = styled('main', {
-  shouldForwardProp: (prop) => prop !== 'open',
-})(({ theme, open }) => ({
-  flexGrow: 1,
-  padding: theme.spacing(3),
-  transition: theme.transitions.create('margin', {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.leavingScreen,
-  }),
-  marginLeft: `-${DRAWER_WIDTH}px`,
-  ...(open && {
-    transition: theme.transitions.create('margin', {
-      easing: theme.transitions.easing.easeOut,
-      duration: theme.transitions.duration.enteringScreen,
-    }),
-    marginLeft: 0,
-  }),
-}));
-
-const DrawerHeader = styled('div')(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: theme.spacing(0, 2),
-  ...theme.mixins.toolbar,
-}));
 
 const NAVIGATION = [
   { label: 'Dashboard', icon: <DashboardIcon />, to: '/' },
@@ -73,6 +45,7 @@ export default function AppShell() {
   const isDesktop = useMediaQuery(theme.breakpoints.up('lg'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
 
   const handleDrawerToggle = () => {
     setMobileOpen((prev) => !prev);
@@ -80,14 +53,16 @@ export default function AppShell() {
 
   const drawer = (
     <Box role="presentation" sx={{ width: DRAWER_WIDTH }}>
-      <DrawerHeader>
+      <Toolbar sx={{ display: 'flex', justifyContent: 'space-between', px: 2 }}>
         <Typography variant="h6" sx={{ fontWeight: 700 }}>
           Chore Champions
         </Typography>
-        <IconButton onClick={handleDrawerToggle} aria-label="close navigation">
-          <ChevronLeftIcon />
-        </IconButton>
-      </DrawerHeader>
+        {!isDesktop && (
+          <IconButton onClick={handleDrawerToggle} aria-label="close navigation">
+            <ChevronLeftIcon />
+          </IconButton>
+        )}
+      </Toolbar>
       <Divider />
       <List>
         {NAVIGATION.map((item) => (
@@ -96,7 +71,11 @@ export default function AppShell() {
             component={RouterLink}
             to={item.to}
             selected={location.pathname === item.to}
-            onClick={() => setMobileOpen(false)}
+            onClick={() => {
+              if (!isDesktop) {
+                setMobileOpen(false);
+              }
+            }}
           >
             <ListItemIcon>{item.icon}</ListItemIcon>
             <ListItemText primary={item.label} />
@@ -107,12 +86,10 @@ export default function AppShell() {
   );
 
   const activeKid = selectedKid?.id ? (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-      <ListItemAvatar>
-        <Avatar sx={{ bgcolor: 'secondary.main' }}>
-          {selectedKid.name?.[0] ?? 'K'}
-        </Avatar>
-      </ListItemAvatar>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mr: 2 }}>
+      <Avatar sx={{ bgcolor: 'secondary.main' }}>
+        {selectedKid.name?.[0] ?? 'K'}
+      </Avatar>
       <Box>
         <Typography variant="subtitle2">{selectedKid.name}</Typography>
         <Typography variant="caption" color="text.secondary">
@@ -150,7 +127,7 @@ export default function AppShell() {
             </Typography>
           </Box>
           {activeKid}
-          <TopBarActions onOpenSettings={() => {}} />
+          <TopBarActions onOpenSettings={() => navigate('/settings')} />
         </Toolbar>
       </AppBar>
       <Box component="nav" sx={{ width: { lg: DRAWER_WIDTH }, flexShrink: { lg: 0 } }}>
@@ -169,12 +146,19 @@ export default function AppShell() {
           {drawer}
         </Drawer>
       </Box>
-      <Main open={isDesktop}>
-        <DrawerHeader />
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          width: { lg: `calc(100% - ${DRAWER_WIDTH}px)` },
+          bgcolor: 'background.default',
+        }}
+      >
+        <Toolbar />
         <Container maxWidth="lg" sx={{ py: 4 }}>
           <Outlet />
         </Container>
-      </Main>
+      </Box>
     </Box>
   );
 }

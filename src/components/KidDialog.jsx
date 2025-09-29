@@ -87,7 +87,9 @@ export default function KidDialog({ open, kid, onClose, onSave }) {
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose} variant="text">
+          Cancel
+        </Button>
         <Button onClick={handleSubmit}>Save</Button>
       </DialogActions>
     </Dialog>
