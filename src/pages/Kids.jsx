@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Avatar,
   Box,
@@ -24,7 +24,7 @@ import KidDialog from '../components/KidDialog';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import EmptyState from '../ui/EmptyState';
 import { useAppData } from '../context/AppDataContext';
-import { useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 
 export default function Kids() {
   const {
@@ -39,6 +39,18 @@ export default function Kids() {
   const [editingKid, setEditingKid] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const editKidId = location.state?.editKidId;
+    if (!editKidId) return;
+    const kidToEdit = kids.find((kid) => kid.id === editKidId);
+    if (kidToEdit) {
+      setEditingKid(kidToEdit);
+      setDialogOpen(true);
+    }
+    navigate(location.pathname, { replace: true });
+  }, [kids, location.pathname, location.state, navigate]);
 
   const handleAddKid = () => {
     setEditingKid(null);
@@ -108,7 +120,20 @@ export default function Kids() {
                   <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                     <CardHeader
                       avatar={<Avatar sx={{ width: 56, height: 56 }}>{kid.name?.[0]}</Avatar>}
-                      title={kid.name}
+                      title={
+                        <Typography
+                          component={RouterLink}
+                          to={`/kids/${kid.id}`}
+                          variant="h6"
+                          sx={{
+                            color: 'inherit',
+                            textDecoration: 'none',
+                            '&:hover': { textDecoration: 'underline' },
+                          }}
+                        >
+                          {kid.name}
+                        </Typography>
+                      }
                       subheader={`Age ${kid.age ?? '—'}`}
                       action={
                         <Stack direction="row" spacing={1}>
@@ -159,7 +184,7 @@ export default function Kids() {
                       </Stack>
                     </CardContent>
                     <CardActions sx={{ justifyContent: 'space-between', px: 3, pb: 3 }}>
-                      <Button variant="text" onClick={() => handleEditKid(kid)}>
+                      <Button variant="text" component={RouterLink} to={`/kids/${kid.id}`}>
                         View profile
                       </Button>
                       <Button onClick={() => handleAssignChores(kid)}>Assign chores</Button>

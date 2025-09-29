@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Chores from './pages/Chores';
 import Rewards from './pages/Rewards';
 import Kids from './pages/Kids';
+import KidDetailPage from './pages/KidDetail';
 import Pet from './pages/Pet';
 import Settings from './pages/Settings';
 
@@ -18,6 +19,7 @@ export default function App() {
             <Route path="chores" element={<Chores />} />
             <Route path="rewards" element={<Rewards />} />
             <Route path="kids" element={<Kids />} />
+            <Route path="kids/:kidId" element={<KidDetailPage />} />
             <Route path="pet" element={<Pet />} />
             <Route path="settings" element={<Settings />} />
           </Route>
