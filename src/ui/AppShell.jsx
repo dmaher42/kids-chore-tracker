@@ -12,6 +12,7 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Stack,
   Toolbar,
   Typography,
   useMediaQuery,
@@ -86,17 +87,17 @@ export default function AppShell() {
   );
 
   const activeKid = selectedKid?.id ? (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mr: 2 }}>
+    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mr: 2 }}>
       <Avatar sx={{ bgcolor: 'secondary.main' }}>
         {selectedKid.name?.[0] ?? 'K'}
       </Avatar>
-      <Box>
+      <Stack spacing={0.25}>
         <Typography variant="subtitle2">{selectedKid.name}</Typography>
         <Typography variant="caption" color="text.secondary">
           {selectedKid.coins ?? 0} coins
         </Typography>
-      </Box>
-    </Box>
+      </Stack>
+    </Stack>
   ) : null;
 
   return (

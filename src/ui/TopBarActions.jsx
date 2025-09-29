@@ -2,12 +2,12 @@ import { useState } from 'react';
 import {
   Avatar,
   Badge,
-  Box,
   IconButton,
   ListItemIcon,
   ListItemText,
   Menu,
   MenuItem,
+  Stack,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -36,7 +36,7 @@ export default function TopBarActions({ user, onLogout, onOpenSettings }) {
     : 'K';
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+    <Stack direction="row" spacing={1} alignItems="center">
       <Tooltip title="Notifications">
         <IconButton color="inherit" aria-label="notifications">
           <Badge color="secondary" badgeContent={user?.alerts ?? 0} max={9}>
@@ -55,12 +55,12 @@ export default function TopBarActions({ user, onLogout, onOpenSettings }) {
         </IconButton>
       </Tooltip>
       <Menu anchorEl={anchorEl} open={open} onClose={handleMenuClose} keepMounted>
-        <Box sx={{ px: 2, py: 1.5 }}>
+        <Stack spacing={0.25} sx={{ px: 2, py: 1.5 }}>
           <Typography variant="subtitle2">{user?.name ?? 'Parent'}</Typography>
           <Typography variant="caption" color="text.secondary">
             {user?.email ?? 'family@home.com'}
           </Typography>
-        </Box>
+        </Stack>
         <MenuItem
           onClick={() => {
             handleMenuClose();
@@ -84,6 +84,6 @@ export default function TopBarActions({ user, onLogout, onOpenSettings }) {
           <ListItemText primary="Sign out" />
         </MenuItem>
       </Menu>
-    </Box>
+    </Stack>
   );
 }
