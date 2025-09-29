@@ -47,6 +47,10 @@ npm run deploy
 
 This script runs `npm run build` followed by `firebase deploy`. Make sure you have the Firebase CLI installed (`npm install -g firebase-tools`) or available via `npx firebase-tools`, and that you are logged into your Firebase project before running the command.
 
+## Deploy
+
+To prepare a production build locally, run `npm run build`. Deployments on GitHub Pages or Firebase Hosting should upload the contents of the generated `build/` directory so the static site serves the compiled Create React App bundle.
+
 ## Troubleshooting
 
 - **Firebase error about missing configuration:** double-check that every value in `.env.local` is filled out. The app throws an explicit error during startup when it cannot find the config.
