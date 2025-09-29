@@ -100,6 +100,11 @@ export function AppDataProvider({ children }) {
     const chore = chores.find((c) => c.id === choreId);
     if (!chore) return;
 
+    const kidChoreSet = chores.filter(
+      (c) => String(c.kidId ?? '') === String(kidId) || c.kidId == null
+    );
+    const kidChoreIds = kidChoreSet.map((c) => c.id);
+
     let newChores;
     if (kidChores.includes(choreId)) {
       newChores = kidChores.filter((id) => id !== choreId);
@@ -111,7 +116,8 @@ export function AppDataProvider({ children }) {
       await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
     } else {
       newChores = [...kidChores, choreId];
-      const allDone = newChores.length === chores.length;
+      const completedRelevant = newChores.filter((id) => kidChoreIds.includes(id)).length;
+      const allDone = kidChoreSet.length > 0 && completedRelevant === kidChoreSet.length;
       const coinsToAdd = chore.value + (allDone ? 5 : 0);
       const updatedKids = kids.map((kid) =>
         kid.id === kidId
@@ -163,12 +169,40 @@ export function AppDataProvider({ children }) {
   const upgradePetLevel = async (kidId) => {
     const kid = kids.find((k) => k.id === kidId);
     if (!kid) return;
-    const cost = kid.petLevel * 10;
-    if (kid.coins < cost || kid.petLevel >= 5) return;
+
+    const owned = kidPets[kidId] || [];
+    const activeIndex = owned.findIndex((pet) => pet.id === kid.activePet);
+
+    if (activeIndex !== -1) {
+      const current = Math.min(owned[activeIndex]?.level ?? 1, 5);
+      const cost = current * 10;
+      if (kid.coins < cost || current >= 5) return;
+
+      const updatedOwned = [...owned];
+      updatedOwned[activeIndex] = { ...updatedOwned[activeIndex], level: current + 1 };
+
+      await setDoc(
+        doc(db, 'app', 'kidPets'),
+        { data: { ...kidPets, [kidId]: updatedOwned } },
+        { merge: true }
+      );
+
+      const updatedKids = kids.map((k) =>
+        k.id === kidId
+          ? { ...k, coins: k.coins - cost, petLevel: current + 1 }
+          : k
+      );
+      await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
+      return;
+    }
+
+    const current = Math.min(kid.petLevel ?? 1, 5);
+    const cost = current * 10;
+    if (kid.coins < cost || current >= 5) return;
 
     const updatedKids = kids.map((k) =>
       k.id === kidId
-        ? { ...k, coins: Math.max(0, k.coins - cost), petLevel: k.petLevel + 1 }
+        ? { ...k, coins: k.coins - cost, petLevel: current + 1 }
         : k
     );
     await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
