@@ -1,7 +1,13 @@
 import { Box, Button, Typography } from '@mui/material';
 import SentimentSatisfiedAltIcon from '@mui/icons-material/SentimentSatisfiedAlt';
 
-export default function EmptyState({ icon = <SentimentSatisfiedAltIcon fontSize="large" />, title, description, actionLabel, onAction }) {
+export default function EmptyState({
+  icon = <SentimentSatisfiedAltIcon fontSize="large" />,
+  title,
+  description,
+  actionLabel,
+  onAction,
+}) {
   return (
     <Box
       sx={{
@@ -24,9 +30,7 @@ export default function EmptyState({ icon = <SentimentSatisfiedAltIcon fontSize=
           {description}
         </Typography>
       )}
-      {actionLabel && (
-        <Button onClick={onAction}>{actionLabel}</Button>
-      )}
+      {actionLabel && <Button onClick={onAction}>{actionLabel}</Button>}
     </Box>
   );
 }

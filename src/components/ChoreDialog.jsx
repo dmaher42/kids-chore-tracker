@@ -122,7 +122,9 @@ export default function ChoreDialog({ open, chore, kids = [], onClose, onSave })
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose} variant="text">
+          Cancel
+        </Button>
         <Button onClick={handleSave}>Save</Button>
       </DialogActions>
     </Dialog>
