@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Avatar,
   Box,
@@ -10,8 +10,10 @@ import {
   Chip,
   Grid,
   LinearProgress,
+  Snackbar,
   Stack,
   Typography,
+  Alert,
 } from '@mui/material';
 import PetsIcon from '@mui/icons-material/Pets';
 import EggIcon from '@mui/icons-material/Egg';
@@ -32,6 +34,16 @@ export default function Pet() {
     buyEgg,
     setActivePet,
   } = useAppData();
+
+  const [snackbar, setSnackbar] = useState({ open: false, message: '' });
+
+  const showSnackbar = (message) => {
+    setSnackbar({ open: true, message });
+  };
+
+  const handleSnackbarClose = () => {
+    setSnackbar((prev) => ({ ...prev, open: false }));
+  };
 
   const kidCards = useMemo(() => {
     return kids.map((kid) => {
@@ -61,6 +73,7 @@ export default function Pet() {
     await updatePetState(card.kid.id, {
       food: Math.min(100, (card.state.food || 0) + 20),
     });
+    showSnackbar('Food +20');
   };
 
   const handlePlay = async (card) => {
@@ -69,6 +82,14 @@ export default function Pet() {
     await updatePetState(card.kid.id, {
       happy: Math.min(100, (card.state.happy || 0) + 20),
     });
+    showSnackbar('Happiness +20');
+  };
+
+  const handleEvolve = async (card) => {
+    const cost = card.level * 10;
+    if (card.kid.coins < cost || card.level >= 5) return;
+    await upgradePetLevel(card.kid.id);
+    showSnackbar(`Evolved to Lv.${Math.min(card.level + 1, 5)}!`);
   };
 
   return (
@@ -175,7 +196,10 @@ export default function Pet() {
                     <Button onClick={() => handlePlay(card)} disabled={card.kid.coins < 2}>
                       Play (-2)
                     </Button>
-                    <Button onClick={() => upgradePetLevel(card.kid.id)} disabled={card.kid.coins < card.kid.petLevel * 10}>
+                    <Button
+                      onClick={() => handleEvolve(card)}
+                      disabled={card.level >= 5 || card.kid.coins < card.kid.petLevel * 10}
+                    >
                       Evolve (-{card.kid.petLevel * 10})
                     </Button>
                     <Button startIcon={<EggIcon />} onClick={() => buyEgg(card.kid.id)} disabled={card.kid.coins < 15}>
@@ -188,6 +212,16 @@ export default function Pet() {
           </Grid>
         )}
       </Stack>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleSnackbarClose} severity="success" sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
