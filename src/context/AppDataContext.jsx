@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { doc, setDoc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase';
 
 const DEFAULT_PET_STATE = { food: 50, happy: 50 };
@@ -167,60 +167,101 @@ export function AppDataProvider({ children }) {
   };
 
   const upgradePetLevel = async (kidId) => {
-    const kid = kids.find((k) => k.id === kidId);
-    if (!kid) return;
+    if (!kidId) return { status: 'error', reason: 'invalid-kid' };
 
-    const owned = kidPets[kidId] || [];
-    const hasOwnedPets = owned.length > 0;
-    const activeIndex = hasOwnedPets
-      ? owned.findIndex((pet) => pet.id === kid.activePet)
-      : -1;
+    try {
+      const kidsRef = doc(db, 'app', 'kids');
+      const kidPetsRef = doc(db, 'app', 'kidPets');
 
-    const targetIndex = hasOwnedPets ? (activeIndex === -1 ? 0 : activeIndex) : -1;
+      const result = await runTransaction(db, async (transaction) => {
+        const [kidsSnap, petsSnap] = await Promise.all([
+          transaction.get(kidsRef),
+          transaction.get(kidPetsRef),
+        ]);
 
-    if (targetIndex !== -1) {
-      const current = Math.min(owned[targetIndex]?.level ?? 1, 5);
-      const cost = current * 10;
-      if (kid.coins < cost || current >= 5) return;
+        if (!kidsSnap.exists()) {
+          return { status: 'error', reason: 'kids-missing' };
+        }
+        if (!petsSnap.exists()) {
+          return { status: 'error', reason: 'pets-missing' };
+        }
 
-      const upgradedPet = {
-        ...owned[targetIndex],
-        level: current + 1,
-      };
-      const updatedOwned = [...owned];
-      updatedOwned[targetIndex] = upgradedPet;
+        const kidsData = kidsSnap.data()?.data ?? [];
+        const petsData = petsSnap.data()?.data ?? {};
 
-      await setDoc(
-        doc(db, 'app', 'kidPets'),
-        { data: { ...kidPets, [kidId]: updatedOwned } },
-        { merge: true }
-      );
+        const kidIndex = kidsData.findIndex((item) => item.id === kidId);
+        if (kidIndex === -1) {
+          return { status: 'error', reason: 'kid-not-found' };
+        }
 
-      const updatedKids = kids.map((k) =>
-        k.id === kidId
-          ? {
-              ...k,
-              coins: k.coins - cost,
-              petLevel: upgradedPet.level,
-              petType: upgradedPet.type,
-              activePet: upgradedPet.id,
-            }
-          : k
-      );
-      await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
-      return;
+        const kidRecord = kidsData[kidIndex];
+        const ownedPets = Array.isArray(petsData[kidId]) ? [...petsData[kidId]] : [];
+
+        if (!ownedPets.length) {
+          return { status: 'error', reason: 'no-active-pet' };
+        }
+
+        const activeIndex = ownedPets.findIndex((pet) => pet.id === kidRecord.activePet);
+        const targetIndex = activeIndex === -1 ? 0 : activeIndex;
+        const activePet = ownedPets[targetIndex];
+
+        if (!activePet) {
+          return { status: 'error', reason: 'no-active-pet' };
+        }
+
+        const currentLevel = Math.min(activePet.level ?? 1, 5);
+        if (currentLevel >= 5) {
+          return { status: 'noop', reason: 'max-level', level: currentLevel };
+        }
+
+        const cost = currentLevel * 10;
+        if ((kidRecord.coins ?? 0) < cost) {
+          return { status: 'error', reason: 'insufficient-coins', cost };
+        }
+
+        const upgradedPet = {
+          ...activePet,
+          level: currentLevel + 1,
+        };
+
+        const updatedOwned = [...ownedPets];
+        updatedOwned[targetIndex] = upgradedPet;
+
+        const updatedPetsData = { ...petsData, [kidId]: updatedOwned };
+        const updatedKid = {
+          ...kidRecord,
+          coins: (kidRecord.coins ?? 0) - cost,
+          petLevel: upgradedPet.level,
+          petType: upgradedPet.type,
+          activePet: upgradedPet.id,
+        };
+
+        const updatedKidsData = [...kidsData];
+        updatedKidsData[kidIndex] = updatedKid;
+
+        transaction.update(kidPetsRef, { data: updatedPetsData });
+        transaction.update(kidsRef, { data: updatedKidsData });
+
+        return {
+          status: 'success',
+          upgradedPet,
+          updatedKid,
+          cost,
+          kidsData: updatedKidsData,
+          petsData: updatedPetsData,
+        };
+      });
+
+      if (result?.status === 'success') {
+        setKids(result.kidsData);
+        setKidPets(result.petsData);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error upgrading pet level:', error);
+      return { status: 'error', reason: 'transaction-failed' };
     }
-
-    const current = Math.min(kid.petLevel ?? 1, 5);
-    const cost = current * 10;
-    if (kid.coins < cost || current >= 5) return;
-
-    const updatedKids = kids.map((k) =>
-      k.id === kidId
-        ? { ...k, coins: k.coins - cost, petLevel: current + 1 }
-        : k
-    );
-    await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
   };
 
   const buyEgg = async (kidId) => {

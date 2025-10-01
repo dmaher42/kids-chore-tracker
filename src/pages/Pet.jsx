@@ -87,9 +87,26 @@ export default function Pet() {
 
   const handleEvolve = async (card) => {
     const cost = card.level * 10;
+    if (!card.activePet) {
+      showSnackbar('Select an active pet before evolving.');
+      return;
+    }
     if (card.kid.coins < cost || card.level >= 5) return;
-    await upgradePetLevel(card.kid.id);
-    showSnackbar(`Evolved to Lv.${Math.min(card.level + 1, 5)}!`);
+
+    const result = await upgradePetLevel(card.kid.id);
+
+    if (result?.status === 'success') {
+      const newLevel = result.upgradedPet?.level ?? Math.min(card.level + 1, 5);
+      showSnackbar(`Evolved to Lv.${newLevel}!`);
+    } else if (result?.reason === 'insufficient-coins') {
+      showSnackbar('Not enough coins to evolve.');
+    } else if (result?.reason === 'max-level') {
+      showSnackbar('This pet is already at max level.');
+    } else if (result?.reason === 'no-active-pet') {
+      showSnackbar('Select an active pet before evolving.');
+    } else if (result?.status === 'error') {
+      showSnackbar('Could not evolve pet. Try again.');
+    }
   };
 
   return (
@@ -198,7 +215,7 @@ export default function Pet() {
                     </Button>
                     <Button
                       onClick={() => handleEvolve(card)}
-                      disabled={card.level >= 5 || card.kid.coins < card.level * 10}
+                      disabled={!card.activePet || card.level >= 5 || card.kid.coins < card.level * 10}
                     >
                       Evolve (-{card.level * 10})
                     </Button>
