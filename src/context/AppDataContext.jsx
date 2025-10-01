@@ -171,15 +171,24 @@ export function AppDataProvider({ children }) {
     if (!kid) return;
 
     const owned = kidPets[kidId] || [];
-    const activeIndex = owned.findIndex((pet) => pet.id === kid.activePet);
+    const hasOwnedPets = owned.length > 0;
+    const activeIndex = hasOwnedPets
+      ? owned.findIndex((pet) => pet.id === kid.activePet)
+      : -1;
 
-    if (activeIndex !== -1) {
-      const current = Math.min(owned[activeIndex]?.level ?? 1, 5);
+    const targetIndex = hasOwnedPets ? (activeIndex === -1 ? 0 : activeIndex) : -1;
+
+    if (targetIndex !== -1) {
+      const current = Math.min(owned[targetIndex]?.level ?? 1, 5);
       const cost = current * 10;
       if (kid.coins < cost || current >= 5) return;
 
+      const upgradedPet = {
+        ...owned[targetIndex],
+        level: current + 1,
+      };
       const updatedOwned = [...owned];
-      updatedOwned[activeIndex] = { ...updatedOwned[activeIndex], level: current + 1 };
+      updatedOwned[targetIndex] = upgradedPet;
 
       await setDoc(
         doc(db, 'app', 'kidPets'),
@@ -189,7 +198,13 @@ export function AppDataProvider({ children }) {
 
       const updatedKids = kids.map((k) =>
         k.id === kidId
-          ? { ...k, coins: k.coins - cost, petLevel: current + 1 }
+          ? {
+              ...k,
+              coins: k.coins - cost,
+              petLevel: upgradedPet.level,
+              petType: upgradedPet.type,
+              activePet: upgradedPet.id,
+            }
           : k
       );
       await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
