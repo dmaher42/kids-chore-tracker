@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { doc, setDoc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase';
 
 const DEFAULT_PET_STATE = { food: 50, happy: 50 };
@@ -167,45 +167,103 @@ export function AppDataProvider({ children }) {
   };
 
   const upgradePetLevel = async (kidId) => {
-    const kid = kids.find((k) => k.id === kidId);
-    if (!kid) return;
+    const kidsRef = doc(db, 'app', 'kids');
+    const kidPetsRef = doc(db, 'app', 'kidPets');
 
-    const owned = kidPets[kidId] || [];
-    const activeIndex = owned.findIndex((pet) => pet.id === kid.activePet);
+    let upgraded = false;
 
-    if (activeIndex !== -1) {
-      const current = Math.min(owned[activeIndex]?.level ?? 1, 5);
-      const cost = current * 10;
-      if (kid.coins < cost || current >= 5) return;
+    try {
+      await runTransaction(db, async (transaction) => {
+        const kidsSnap = await transaction.get(kidsRef);
+        if (!kidsSnap.exists()) {
+          return;
+        }
 
-      const updatedOwned = [...owned];
-      updatedOwned[activeIndex] = { ...updatedOwned[activeIndex], level: current + 1 };
+        const petsSnap = await transaction.get(kidPetsRef);
+        const kidsData = kidsSnap.data().data || [];
+        const kidIndex = kidsData.findIndex((entry) => entry.id === kidId);
 
-      await setDoc(
-        doc(db, 'app', 'kidPets'),
-        { data: { ...kidPets, [kidId]: updatedOwned } },
-        { merge: true }
-      );
+        if (kidIndex === -1) {
+          return;
+        }
 
-      const updatedKids = kids.map((k) =>
-        k.id === kidId
-          ? { ...k, coins: k.coins - cost, petLevel: current + 1 }
-          : k
-      );
-      await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
-      return;
+        const kidRecord = { ...kidsData[kidIndex] };
+        const coinsAvailable = Number(kidRecord.coins ?? 0);
+        const petsData = (petsSnap.exists() ? petsSnap.data().data : {}) || {};
+        const ownedList = Array.isArray(petsData[kidId]) ? [...petsData[kidId]] : [];
+
+        let activePetIndex = -1;
+
+        if (ownedList.length > 0) {
+          const preferredPetId =
+            kidRecord.activePet ?? ownedList[0]?.id ?? null;
+          activePetIndex = ownedList.findIndex(
+            (pet) => String(pet.id) === String(preferredPetId)
+          );
+
+          if (activePetIndex === -1) {
+            activePetIndex = 0;
+          }
+        } else if (kidRecord.petType && kidRecord.petType !== 'none') {
+          const legacyPet = {
+            id: Date.now(),
+            type: kidRecord.petType,
+            level: kidRecord.petLevel ?? 1,
+          };
+          ownedList.push(legacyPet);
+          activePetIndex = 0;
+        }
+
+        if (activePetIndex === -1) {
+          return;
+        }
+
+        const currentLevel = Math.max(
+          1,
+          Math.min(Number(ownedList[activePetIndex]?.level ?? 1), 5)
+        );
+
+        if (currentLevel >= 5) {
+          return;
+        }
+
+        const cost = currentLevel * 10;
+
+        if (coinsAvailable < cost) {
+          return;
+        }
+
+        const evolvedPet = {
+          ...ownedList[activePetIndex],
+          level: currentLevel + 1,
+        };
+        ownedList[activePetIndex] = evolvedPet;
+
+        transaction.set(
+          kidPetsRef,
+          { data: { ...petsData, [kidId]: ownedList } },
+          { merge: true }
+        );
+
+        const updatedKid = {
+          ...kidRecord,
+          coins: coinsAvailable - cost,
+          petLevel: evolvedPet.level,
+          petType: evolvedPet.type ?? kidRecord.petType,
+          activePet: evolvedPet.id ?? kidRecord.activePet,
+        };
+
+        const updatedKids = [...kidsData];
+        updatedKids[kidIndex] = updatedKid;
+
+        transaction.update(kidsRef, { data: updatedKids });
+        upgraded = true;
+      });
+    } catch (error) {
+      console.error('Error upgrading pet level:', error);
     }
 
-    const current = Math.min(kid.petLevel ?? 1, 5);
-    const cost = current * 10;
-    if (kid.coins < cost || current >= 5) return;
-
-    const updatedKids = kids.map((k) =>
-      k.id === kidId
-        ? { ...k, coins: k.coins - cost, petLevel: current + 1 }
-        : k
-    );
-    await updateDoc(doc(db, 'app', 'kids'), { data: updatedKids });
+    return upgraded;
   };
 
   const buyEgg = async (kidId) => {

@@ -35,10 +35,10 @@ export default function Pet() {
     setActivePet,
   } = useAppData();
 
-  const [snackbar, setSnackbar] = useState({ open: false, message: '' });
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  const showSnackbar = (message) => {
-    setSnackbar({ open: true, message });
+  const showSnackbar = (message, severity = 'success') => {
+    setSnackbar({ open: true, message, severity });
   };
 
   const handleSnackbarClose = () => {
@@ -87,9 +87,15 @@ export default function Pet() {
 
   const handleEvolve = async (card) => {
     const cost = card.level * 10;
-    if (card.kid.coins < cost || card.level >= 5) return;
-    await upgradePetLevel(card.kid.id);
-    showSnackbar(`Evolved to Lv.${Math.min(card.level + 1, 5)}!`);
+    if (!card.activePet || card.kid.coins < cost || card.level >= 5) return;
+
+    const evolved = await upgradePetLevel(card.kid.id);
+
+    if (evolved) {
+      showSnackbar(`Evolved to Lv.${Math.min(card.level + 1, 5)}!`);
+    } else {
+      showSnackbar('Pet could not evolve right now. Try again soon.', 'error');
+    }
   };
 
   return (
@@ -198,9 +204,11 @@ export default function Pet() {
                     </Button>
                     <Button
                       onClick={() => handleEvolve(card)}
-                      disabled={card.level >= 5 || card.kid.coins < card.kid.petLevel * 10}
+                      disabled={
+                        !card.activePet || card.level >= 5 || card.kid.coins < card.level * 10
+                      }
                     >
-                      Evolve (-{card.kid.petLevel * 10})
+                      Evolve (-{card.level * 10})
                     </Button>
                     <Button startIcon={<EggIcon />} onClick={() => buyEgg(card.kid.id)} disabled={card.kid.coins < 15}>
                       Buy egg (-15)
@@ -218,7 +226,11 @@ export default function Pet() {
         onClose={handleSnackbarClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert onClose={handleSnackbarClose} severity="success" sx={{ width: '100%' }}>
+        <Alert
+          onClose={handleSnackbarClose}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
           {snackbar.message}
         </Alert>
       </Snackbar>
