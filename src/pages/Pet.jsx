@@ -198,9 +198,9 @@ export default function Pet() {
                     </Button>
                     <Button
                       onClick={() => handleEvolve(card)}
-                      disabled={card.level >= 5 || card.kid.coins < card.kid.petLevel * 10}
+                      disabled={card.level >= 5 || card.kid.coins < card.level * 10}
                     >
-                      Evolve (-{card.kid.petLevel * 10})
+                      Evolve (-{card.level * 10})
                     </Button>
                     <Button startIcon={<EggIcon />} onClick={() => buyEgg(card.kid.id)} disabled={card.kid.coins < 15}>
                       Buy egg (-15)
