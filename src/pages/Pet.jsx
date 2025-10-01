@@ -89,10 +89,11 @@ export default function Pet() {
     const cost = card.level * 10;
     if (!card.activePet || card.kid.coins < cost || card.level >= 5) return;
 
-    const evolved = await upgradePetLevel(card.kid.id);
+    const result = await upgradePetLevel(card.kid.id);
 
-    if (evolved) {
-      showSnackbar(`Evolved to Lv.${Math.min(card.level + 1, 5)}!`);
+    if (result?.success) {
+      const nextLevel = Math.min(result.newLevel ?? card.level + 1, 5);
+      showSnackbar(`Evolved to Lv.${nextLevel}!`);
     } else {
       showSnackbar('Pet could not evolve right now. Try again soon.', 'error');
     }

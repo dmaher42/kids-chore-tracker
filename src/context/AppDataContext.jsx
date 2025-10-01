@@ -170,7 +170,7 @@ export function AppDataProvider({ children }) {
     const kidsRef = doc(db, 'app', 'kids');
     const kidPetsRef = doc(db, 'app', 'kidPets');
 
-    let upgraded = false;
+    let result = null;
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -190,7 +190,8 @@ export function AppDataProvider({ children }) {
         const kidRecord = { ...kidsData[kidIndex] };
         const coinsAvailable = Number(kidRecord.coins ?? 0);
         const petsData = (petsSnap.exists() ? petsSnap.data().data : {}) || {};
-        const ownedList = Array.isArray(petsData[kidId]) ? [...petsData[kidId]] : [];
+        const currentList = Array.isArray(petsData[kidId]) ? petsData[kidId] : [];
+        const ownedList = currentList.map((pet) => ({ ...pet }));
 
         let activePetIndex = -1;
 
@@ -239,12 +240,6 @@ export function AppDataProvider({ children }) {
         };
         ownedList[activePetIndex] = evolvedPet;
 
-        transaction.set(
-          kidPetsRef,
-          { data: { ...petsData, [kidId]: ownedList } },
-          { merge: true }
-        );
-
         const updatedKid = {
           ...kidRecord,
           coins: coinsAvailable - cost,
@@ -256,14 +251,35 @@ export function AppDataProvider({ children }) {
         const updatedKids = [...kidsData];
         updatedKids[kidIndex] = updatedKid;
 
+        const updatedKidPets = { ...petsData, [kidId]: ownedList };
+
+        transaction.set(
+          kidPetsRef,
+          { data: updatedKidPets },
+          { merge: true }
+        );
         transaction.update(kidsRef, { data: updatedKids });
-        upgraded = true;
+
+        result = {
+          updatedKid,
+          updatedKids,
+          updatedKidPets,
+          newLevel: evolvedPet.level,
+          cost,
+        };
       });
     } catch (error) {
       console.error('Error upgrading pet level:', error);
+      return { success: false };
     }
 
-    return upgraded;
+    if (result) {
+      setKids(result.updatedKids);
+      setKidPets(result.updatedKidPets);
+      return { success: true, newLevel: result.newLevel, cost: result.cost };
+    }
+
+    return { success: false };
   };
 
   const buyEgg = async (kidId) => {
